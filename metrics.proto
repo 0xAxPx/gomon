@@ -1,0 +1,43 @@
+
+syntax = "proto3";
+
+package main;
+
+option go_package = "./pb";
+
+
+message Metric {
+
+    string hostname = 1; // the name of hostname
+    string timestamp = 2; // the time when metric was collected
+
+
+    // CPU statistics
+    float cpu_usage_percent = 3; 
+
+    // Memory statistics
+    float memory_used_percent = 4;
+    uint64 memory_total_gb = 5;
+    uint64 memory_used_gb = 6; 
+    uint64 memory_free_gb = 7;
+
+    // Disk statistics
+    repeated DiskUsage disk_stats = 8;
+
+    // Network statistics
+    repeated NetworkUsage net_stats = 9;
+
+}
+
+message DiskUsage {
+        string mountpoint = 1;
+        float used_percent = 2;
+        uint64 total_gb = 3;
+        uint64 used_gb = 4;
+}
+
+message NetworkUsage {
+        string interface_name = 1;
+        uint64 bytes_sent = 2;
+        uint64 bytes_received = 3;
+}

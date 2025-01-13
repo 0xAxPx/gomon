@@ -1,0 +1,10 @@
+
+{"metric":
+    {
+        "__name__":"up",
+        "job":"node_exporter",
+        "instance":"localhost:9100"
+        },
+    "values":[5,446,343],
+    "timestamps":[1734214186000,1734214186000,1734214186000]
+}

@@ -1,0 +1,167 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"gomon/pb" // Import your generated protobuf package
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+
+	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
+)
+
+// StartAggregator function consumes messages from Kafka and processes them
+func StartAggregator() error {
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers: []string{"localhost:9092"},
+		GroupID: "metrics-group",
+		Topic:   "metrics-topic",
+	})
+	defer reader.Close()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	for {
+		select {
+		case <-sigs:
+			log.Println("Received termination signal, stopping aggregator...")
+			return nil
+		default:
+			msg, err := reader.ReadMessage(context.Background())
+			if err != nil {
+				log.Printf("Could not read message: %v", err)
+				continue
+			}
+
+			err = processAndSendMetrics(msg.Value)
+			if err != nil {
+				log.Printf("Error processing message: %v", err)
+			}
+		}
+	}
+}
+
+// processAndSendMetrics processes and sends separate metrics to VictoriaMetrics
+func processAndSendMetrics(protoData []byte) error {
+	var metric pb.Metric
+	err := proto.Unmarshal(protoData, &metric)
+	if err != nil {
+		return fmt.Errorf("could not unmarshal protobuf data: %v", err)
+	}
+
+	err = sendMetricToVictoria("cpu_usage_percent", metric.CpuUsagePercent, metric.Timestamp)
+	if err != nil {
+		return fmt.Errorf("error sending CPU metric: %v", err)
+	} else {
+		log.Println("Successfully sent CPU metrics to VictoriaMetrics")
+	}
+
+	err = sendMetricToVictoria("mem_usage_percent", metric.MemoryUsedPercent, metric.Timestamp)
+	if err != nil {
+		return fmt.Errorf("error sending MemUsage metric: %v", err)
+	} else {
+		log.Println("Successfully sent Mem metrics to VictoriaMetrics")
+	}
+
+	err = sendMetricToVictoria("dsk_used_gb", float32(metric.MemoryUsedGb), metric.Timestamp)
+	if err != nil {
+		return fmt.Errorf("error sending Disk Used GB metric: %v", err)
+	} else {
+		log.Println("Successfully sent Disk Used (GB) metrics to VictoriaMetrics")
+	}
+
+	err = sendMetricToVictoria("dsk_free_gb", float32(metric.MemoryFreeGb), metric.Timestamp)
+	if err != nil {
+		return fmt.Errorf("error sending Disk Free GB metric: %v", err)
+	} else {
+		log.Println("Successfully sent Disk Free (GB) metrics to VictoriaMetrics")
+	}
+
+	log.Println("Successfully processed and sent metrics to VictoriaMetrics")
+	return nil
+}
+
+// sendMetricToVictoria sends individual metrics to VictoriaMetrics
+func sendMetricToVictoria(metricName string, value float32, timestampStr string) error {
+	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp format: %v", err)
+	}
+
+	// Get Hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("error getting hostname: %v", err)
+	}
+
+	// Prepare the payload for VictoriaMetrics
+	data := map[string]interface{}{
+		"metric": map[string]string{
+			"__name__": metricName,       // Metric name
+			"job":      hostname,         // Job label
+			"instance": "localhost:9100", // Instance label
+		},
+		"values":     []float64{float64(value)}, // Convert to float64 as required by VictoriaMetrics
+		"timestamps": []int64{timestamp * 1000}, // Convert to milliseconds
+	}
+
+	// Log the JSON for debugging
+	jsonData, _ := json.MarshalIndent(data, "", "  ")
+	log.Printf("Sending JSON to VictoriaMetrics: %s\n", string(jsonData))
+
+	// Send data to VictoriaMetrics
+	return sendToVictoriaMetrics(data)
+}
+
+// sendToVictoriaMetrics sends data to VictoriaMetrics
+func sendToVictoriaMetrics(data map[string]interface{}) error {
+	url := "http://127.0.0.1:8428/api/v1/import"
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("could not marshal JSON: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("could not create HTTP request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("could not send HTTP request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("Request Body: %s", string(jsonData))
+	log.Printf("Response Status: %d", resp.StatusCode)
+	log.Printf("Response Body: %s", string(body))
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		log.Printf("Successfully sent metrics to VictoriaMetrics. Status: %s", resp.Status)
+	} else {
+		return fmt.Errorf("unexpected response from VictoriaMetrics: %s", resp.Status)
+	}
+
+	return nil
+}
+
+func main() {
+	err := StartAggregator()
+	if err != nil {
+		log.Fatal("Failed to start aggregator:", err)
+	}
+}
