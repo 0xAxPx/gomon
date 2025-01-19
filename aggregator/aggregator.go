@@ -50,6 +50,28 @@ func StartAggregator() error {
 	}
 }
 
+func sendNetStats(metric *pb.Metric) error {
+	for _, net := range metric.NetStats {
+		if net != nil {
+
+			err := sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp)
+			if err != nil {
+				return fmt.Errorf("error sending Cumulative Inet Bytes Recv (MB) metric: %v", err)
+			} else {
+				log.Println("Successfully sent Inet Bytes Recv (MB) metrics to VictoriaMetrics")
+			}
+
+			err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp)
+			if err != nil {
+				return fmt.Errorf("error sending Cumulative Inet Bytes Sent (MB) metric: %v", err)
+			} else {
+				log.Println("Successfully sent Cumulative Inet Bytes Sent (MB) metrics to VictoriaMetrics")
+			}
+		}
+	}
+	return nil
+}
+
 // processAndSendMetrics processes and sends separate metrics to VictoriaMetrics
 func processAndSendMetrics(protoData []byte) error {
 	var metric pb.Metric
@@ -79,12 +101,41 @@ func processAndSendMetrics(protoData []byte) error {
 		log.Println("Successfully sent Disk Used (GB) metrics to VictoriaMetrics")
 	}
 
-	err = sendMetricToVictoria("dsk_free_gb", float32(metric.MemoryFreeGb), metric.Timestamp)
-	if err != nil {
-		return fmt.Errorf("error sending Disk Free GB metric: %v", err)
-	} else {
-		log.Println("Successfully sent Disk Free (GB) metrics to VictoriaMetrics")
+	// Iterating Disk stats
+	for _, disk := range metric.DiskStats {
+		if disk != nil {
+			err = sendMetricToVictoria("disk_used_percent", float32(disk.UsedPercent), metric.Timestamp)
+			if err != nil {
+				return fmt.Errorf("error sending Disk Used Percent metric: %v", err)
+			} else {
+				log.Println("Successfully sent Disk Used(%) metrics to VictoriaMetrics")
+			}
+		}
 	}
+
+	// Iterating Net stats
+	if err := sendNetStats(&metric); err != nil {
+		return fmt.Errorf("error sending Net Stats: %v", err)
+	}
+
+	// for _, net := range metric.NetStats {
+	// 	if net != nil {
+
+	// 		err = sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp)
+	// 		if err != nil {
+	// 			return fmt.Errorf("error sending Cumulative Inet Bytes Recv (MB) metric: %v", err)
+	// 		} else {
+	// 			log.Println("Successfully sent Inet Bytes Recv (MB) metrics to VictoriaMetrics")
+	// 		}
+
+	// 		err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp)
+	// 		if err != nil {
+	// 			return fmt.Errorf("error sending Cumulative Inet Bytes Sent (MB) metric: %v", err)
+	// 		} else {
+	// 			log.Println("Successfully sent Cumulative Inet Bytes Sent (MB) metrics to VictoriaMetrics")
+	// 		}
+	// 	}
+	// }
 
 	log.Println("Successfully processed and sent metrics to VictoriaMetrics")
 	return nil
