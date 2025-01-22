@@ -1,2 +1,3 @@
 # Ignore victoria-metrics data
 victoria-metrics-data/
+.terraform/
