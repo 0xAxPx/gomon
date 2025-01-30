@@ -21,7 +21,7 @@ import (
 // StartAggregator function consumes messages from Kafka and processes them
 func StartAggregator() error {
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: []string{"localhost:9092"},
+		Brokers: []string{"kafka:9092"},
 		GroupID: "metrics-group",
 		Topic:   "metrics-topic",
 	})

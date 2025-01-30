@@ -40,7 +40,13 @@ metrics-topic
 # Check Kafka messages
 docker exec -it kafka kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic metrics-topic --from-beginning
 
-# Agent Container
+# Start Agent Container
+docker build -t gomon-agent --no-cache -f Dockerfile.agent .
 docker run -d --name gomon-agent-container --network metrics-network gomon-agent
+
+# Start Aggregator Container
+docker build -t aggregator --no-cache -f Dockerfile.aggregator .
+docker run -d --name gomon-agg-container --network metrics-network aggregator
+
 
 
