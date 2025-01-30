@@ -161,11 +161,11 @@ func main() {
 		log.Fatal(http.ListenAndServe("localhost:8094", nil))
 	}()
 
-	producer := kafka.NewKafkaProducer("localhost:9092", "metrics-topic")
+	producer := kafka.NewKafkaProducer("kafka:9092", "metrics-topic")
 	defer producer.Close()
 
 	i := 0
-	t := 2
+	t := 10
 	for {
 		metric := &pb.Metric{
 			Timestamp: strconv.FormatInt(time.Now().Unix(), 10),
