@@ -157,9 +157,9 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string)
 	// Prepare the payload for VictoriaMetrics
 	data := map[string]interface{}{
 		"metric": map[string]string{
-			"__name__": metricName,       // Metric name
-			"job":      hostname,         // Job label
-			"instance": "localhost:9100", // Instance label
+			"__name__": metricName,           // Metric name
+			"job":      "metrics-aggregator", // Job label
+			"instance": hostname + "-agg",    // Instance label
 		},
 		"values":     []float64{float64(value)}, // Convert to float64 as required by VictoriaMetrics
 		"timestamps": []int64{timestamp * 1000}, // Convert to milliseconds
@@ -175,7 +175,7 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string)
 
 // sendToVictoriaMetrics sends data to VictoriaMetrics
 func sendToVictoriaMetrics(data map[string]interface{}) error {
-	url := "http://127.0.0.1:8428/api/v1/import"
+	url := "http://10.110.34.180:8428/api/v1/import"
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {

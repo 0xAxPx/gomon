@@ -48,5 +48,32 @@ docker run -d --name gomon-agent-container --network metrics-network gomon-agent
 docker build -t aggregator --no-cache -f Dockerfile.aggregator .
 docker run -d --name gomon-agg-container --network metrics-network aggregator
 
+# Kubernetes
+
+## Run Zookeper
+kubectl apply -f k8s/zookeeper-deployment.yaml
+kubectl logs -f `kubectl get pods | grep zookeeper | awk '{print $1}'`
+or inside of pod
+kubectl exec --it `kubect get deployment | grep zookeeper | awk '{print $1}'`
+
+## Set up Kub dashboard
+kubect get pods -A | grep dashboard
+kubectl apply -f k8s/admin-user.yaml
+ubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+### Create token
+kubectl -n kubernetes-dashboard create token admin-user
+### Get proxy up
+kubectl proxy
+### Open browser and appy token 
+http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+
+
+# Victoria Metrics
+kubectl create namespace monitoring
+kubectl get namespace
+kubectl apply -f k8s/vm-deployment.yaml
+kubectl port-forward -n monitoring svc/victoria-metrics 8428:8428
+
+
 
 
