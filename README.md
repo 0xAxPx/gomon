@@ -49,6 +49,9 @@ docker build -t aggregator --no-cache -f Dockerfile.aggregator .
 docker run -d --name gomon-agg-container --network metrics-network aggregator
 
 # Kubernetes
+kubectl create namespace monitoring
+kubectl get namespace
+kubectl config set-context --current --namespace=monitoring
 
 ## Run Zookeper
 kubectl apply -f k8s/zookeeper-deployment.yaml
@@ -69,10 +72,12 @@ http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kube
 
 
 # Victoria Metrics
-kubectl create namespace monitoring
-kubectl get namespace
 kubectl apply -f k8s/vm-deployment.yaml
 kubectl port-forward -n monitoring svc/victoria-metrics 8428:8428
+
+# Grafana
+kubectl apply -f k8s/grafana-deployment.yaml
+
 
 
 
