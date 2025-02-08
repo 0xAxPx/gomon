@@ -78,6 +78,14 @@ kubectl port-forward -n monitoring svc/victoria-metrics 8428:8428
 # Grafana
 kubectl apply -f k8s/grafana-deployment.yaml
 
+# Utility for Deployment & Services
+kubectl delete deployments --all --all-namespaces
+kubectl delete statefulsets --all --all-namespaces
+kubectl delete replicasets --all --all-namespaces
+kubectl delete daemonsets --all --all-namespaces
+
+kubectl describe statefulset kafka -n monitoring
+
 
 
 

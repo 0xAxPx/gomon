@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregator
+  namespace: monitoring
+spec:
+  replicas: 1 # Adjust as needed
+  selector:
+    matchLabels:
+      app: aggregator
+  template:
+    metadata:
+      labels:
+        app: aggregator
+    spec:
+      containers:
+      - name: aggregator
+        image: ragazzo271985/aggregator:latest # Replace with your Docker Hub image name
+        imagePullPolicy: Always # Or IfPresent/Never for production
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+        env:
+        - name: KAFKA_BROKER # Kafka broker service name
+          value: kafka:9092
+        - name: VICTORIA_METRICS_URL # Victoria Metrics service URL
+          value: http://victoria-metrics:8428/api/v1/write  # Assuming service name is victoria-metrics
+        volumeMounts:  # If you need persistent storage
+          # - name: agg-data
+          #   mountPath: /data
+      volumes: # If you need persistent storage
+        # - name: agg-data
+        #   persistentVolumeClaim:
+        #     claimName: agg-pvc
+      imagePullSecrets: # If your Docker Hub repo is private
+      - name: regcred # Name of your ImagePullSecret
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aggregator # Name of the service
+  namespace: monitoring
+spec:
+  selector:
+    app: aggregator
+  ports:
+  - protocol: TCP
+    port: 8080 # Expose this port if your aggregator has an HTTP endpoint
+    targetPort: 8080 # The port the aggregator listens on inside the container
+  type: ClusterIP # Or NodePort/LoadBalancer if you need external access

@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: StatefulSet # Kafka is stateful, so use StatefulSet
+metadata:
+  name: kafka
+  namespace: monitoring
+spec:
+  serviceName: "kafka" # Important for headless service
+  replicas: 3 # Recommended: 3 for production, 1 for development (but data loss possible)
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: bitnami/kafka:latest # Or confluentinc/cp-kafka:latest if you prefer
+        ports:
+        - containerPort: 9092 # Kafka broker port
+          name: plaintext
+        - containerPort: 9093 # Kafka broker inter-broker communication port
+          name: broker-listeners
+        env:
+        - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+          value: zookeeper:2181 # Zookeeper service name
+        - name: KAFKA_CFG_LISTENERS
+          value: PLAINTEXT://:9092,BROKER_LISTENERS://:9093
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS # Important for clients to connect
+          value: PLAINTEXT://kafka-0.kafka.monitoring.svc.cluster.local:9092,BROKER_LISTENERS://:9093 # Or your external access method
+        volumeMounts:
+        - name: kafka-data # Persistent volume for Kafka data
+          mountPath: /bitnami/kafka/data # Path inside the container
+      volumes:
+      - name: kafka-data # Persistent volume
+        persistentVolumeClaim:
+          claimName: kafka-pvc # Name of your PersistentVolumeClaim (create this separately)
+
+---
+apiVersion: v1
+kind: Service # Headless Service for Kafka
+metadata:
+  name: kafka
+  namespace: monitoring
+spec:
+  clusterIP: None # Important for Kafka
+  ports:
+  - port: 9092 # Client port
+    name: plaintext
+  - port: 9093 # Inter-broker communication
+    name: broker-listeners
+  selector:
+    app: kafka
+
+---
+# Optional: Service for external access (if needed) - NodePort Example
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-external
+  namespace: monitoring
+spec:
+  type: NodePort # Or LoadBalancer if you have a cloud provider
+  ports:
+  - port: 9092 # External port
+    targetPort: 9092 # Kafka broker port
+    nodePort: 30092 # Choose an available port on your nodes (30000-32767 range)
+  selector:
+    app: kafka
