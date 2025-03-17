@@ -23,46 +23,20 @@ spec:
                 operator: In
                 values:
                 - docker-desktop
-      containers:
-      - name: kafka
-        image: bitnami/kafka:latest
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            export KAFKA_ADVERTISED_LISTENERS="CLIENT://$(POD_NAME).kafka.monitoring.svc.cluster.local:9092,BROKER://$(POD_NAME).kafka.monitoring.svc.cluster.local:9093";
-            exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh      
-        ports:
-        - containerPort: 9092
-          name: kafka-0
-        - containerPort: 9093
-          name: kafka-1
-        env:
-        - name: KAFKA_BROKER_ID
-          valueFrom:
-            configMapKeyRef:
-              name: kafka-broker-id-config
-              key: broker.id
-        - name: KAFKA_BROKER_ID_FALLBACK
-          value: '$(echo ${POD_NAME} | grep -o "[0-9]*$")'
-        - name: KAFKA_BROKER_ID_FINAL
-          value: "$(KAFKA_BROKER_ID:-$(KAFKA_BROKER_ID_FALLBACK))"
-        - name: KAFKA_ZOOKEEPER_CONNECT
-          value: zookeeper.monitoring.svc.cluster.local:2181
-        - name: KAFKA_LISTENERS
-          value: CLIENT://:9092,BROKER://:9093
-        - name: KAFKA_ADVERTISED_LISTENERS
-          value: CLIENT://$(POD_NAME).kafka.monitoring.svc.cluster.local:9092,BROKER://$(POD_NAME).kafka.monitoring.svc.cluster.local:9093
-        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
-          value: CLIENT:PLAINTEXT,BROKER:PLAINTEXT
-        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
-          value: BROKER
-        volumeMounts:
-        - name: kafka-data
-          mountPath: /bitnami/kafka/data
-        - name: broker-id-config
-          mountPath: /etc/kafka/broker-id
-          subPath: broker.id
       initContainers:
+      - name: cleanup-zookeeper
+        image: bitnami/zookeeper:latest
+        command:
+        - sh
+        - -c
+        - |
+          echo "Cleaning up Zookeeper data for broker $(echo $POD_NAME | grep -oE '[0-9]+$')"
+          zkCli.sh deleteall /brokers/ids/$(echo $POD_NAME | grep -oE '[0-9]+$') || true
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
       - name: generate-broker-id
         image: busybox:latest
         command:
@@ -80,6 +54,52 @@ spec:
         volumeMounts:
         - name: broker-id-config
           mountPath: /config
+      containers:
+      - name: kafka
+        image: bitnami/kafka:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export KAFKA_BROKER_ID=$(cat /etc/kafka/broker-id);
+            export POD_IP=$(hostname -i);
+            export KAFKA_ADVERTISED_LISTENERS="CLIENT://$POD_IP:9092,BROKER://$POD_IP:9093";
+            exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
+        ports: 
+        - containerPort: 9092
+          name: kafka-0
+        - containerPort: 9093
+          name: kafka-1
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: zookeeper.monitoring.svc.cluster.local:2181
+        - name: KAFKA_LISTENERS
+          value: CLIENT://:9092,BROKER://:9093
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: CLIENT://$(POD_NAME).kafka.monitoring.svc.cluster.local:9092,BROKER://$(POD_NAME).kafka.monitoring.svc.cluster.local:9093
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: CLIENT:PLAINTEXT,BROKER:PLAINTEXT
+        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+          value: BROKER
+        - name: KAFKA_CLUSTER_ID
+          value: "Gi6UrH-kT4i9NeINp9Sx4w"
+        - name: KAFKA_REPLICA_FETCH_MAX_BYTES
+          value: "1048576000"  # 1 GB
+        - name: KAFKA_SOCKET_REQUEST_MAX_BYTES
+          value: "1048576000"  # 1 GB
+        - name: KAFKA_MESSAGE_MAX_BYTES
+          value: "1048576000"  # 1 GB
+        - name: KAFKA_LOG4J_OPTS
+          value: "-Dlog4j.configuration=file:/opt/bitnami/kafka/config/log4j.properties"
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /bitnami/kafka/data
+        - name: broker-id-config
+          mountPath: /etc/kafka/broker-id
+          subPath: broker.id
       volumes:
       - name: broker-id-config
         emptyDir: {}
