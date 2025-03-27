@@ -4,49 +4,27 @@ metadata:
   name: agent
   namespace: monitoring
 spec:
-  replicas: 1 # Number of pod replicas (instances)
-  selector: # How to match pods belonging to this deployment
+  replicas: 1
+  selector:
     matchLabels:
       app: agent
-  template: # Pod template (what each pod will look like)
+  template:
     metadata:
       labels:
-        app: agent # Labels for the pod
+        app: agent
     spec:
       containers:
-      - name: agent # Name of the container within the pod
-        image: ragazzo271985/gomon-agent:latest # Docker image to use (replace with your registry)
-        imagePullPolicy: Always # Always pull the latest image (can be Always, IfPresent, or Never)
-        resources: # Resource requests and limits for the container
-          requests: # Minimum resources the container needs
-            cpu: 100m # 100 millicores (1/10th of a CPU core)
-            memory: 256Mi # 256 Megabytes of memory
-          limits: # Maximum resources the container can use
-            cpu: 200m # 200 millicores
-            memory: 512Mi # 512 Megabytes
-        ports: # Ports the container exposes (if any)
-        - containerPort: 8080 # If your agent listens on port 8080. Remove if not needed.
-        env: # Environment variables for the container
-        - name: KAFKA_BROKER # Name of the environment variable
-          value: kafka:9092 # Value of the environment variable (Kafka service name)
-        volumeMounts: # Mounts for persistent volumes (if needed)
-          # - name: agent-data # Name of the volume mount
-          #   mountPath: /data # Path inside the container where the volume is mounted
-      volumes: # Define persistent volumes (if needed)
-        # - name: agent-data # Name of the volume
-        #   persistentVolumeClaim: # Use a PersistentVolumeClaim
-        #     claimName: agent-pvc # Name of the PersistentVolumeClaim (create this separately)
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: agent
-  namespace: monitoring
-spec:
-  selector: # How to match pods the service will target
-    app: agent
-  ports:
-  - protocol: TCP # TCP protocol
-    port: 8080 # Port the service exposes (external access)
-    targetPort: 8080 # Port the container listens on (internal)
-  type: ClusterIP # Service type (ClusterIP, NodePort, LoadBalancer)
+      - name: agent
+        image: ragazzo271985/gomon-agent:k8-3
+        env:
+        - name: KAFKA_BROKERS
+          value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092"
+        - name: KAFKA_TOPIC
+          value: "metrics-topic"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"

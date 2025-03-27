@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/segmentio/kafka-go"
@@ -20,10 +21,24 @@ import (
 
 // StartAggregator function consumes messages from Kafka and processes them
 func StartAggregator() error {
+
+	// Read Kafka env variable
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		log.Fatal("KAFKA_BROKERS environment variable is not set")
+	}
+
+	// Read Kafka topic from environment variable
+	kafkaTopic := os.Getenv("KAFKA_TOPIC")
+	if kafkaTopic == "" {
+		log.Fatal("KAFKA_TOPIC environment variable is not set")
+	}
+
+	log.Printf("Creating Kafka producer with brokers %v and topic %s", kafkaBrokers, kafkaTopic)
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: []string{"kafka:9092"},
+		Brokers: strings.Split(kafkaBrokers, ","),
 		GroupID: "metrics-group",
-		Topic:   "metrics-topic",
+		Topic:   kafkaTopic,
 	})
 	defer reader.Close()
 
@@ -175,14 +190,18 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string)
 
 // sendToVictoriaMetrics sends data to VictoriaMetrics
 func sendToVictoriaMetrics(data map[string]interface{}) error {
-	url := "http://10.110.34.180:8428/api/v1/import"
+
+	victoriaMetrics := os.Getenv("VICTORIA_METRICS_URL")
+	if victoriaMetrics == "" {
+		log.Fatal("VICTORIA_METRICS_URL environment variable is not set")
+	}
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("could not marshal JSON: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", victoriaMetrics, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("could not create HTTP request: %v", err)
 	}
