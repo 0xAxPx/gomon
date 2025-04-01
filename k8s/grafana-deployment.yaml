@@ -34,7 +34,7 @@ metadata:
   name: grafana
   namespace: monitoring
 spec:
-  type: NodePort  # Expose via browser
+  type: ClusterIP  # Expose via browser
   selector:
     app: grafana
   ports:
