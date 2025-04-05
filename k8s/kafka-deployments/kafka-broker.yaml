@@ -19,68 +19,85 @@ spec:
       hostname: $(POD_NAME)
       dnsPolicy: ClusterFirst
       containers:
-      - name: kafka
-        image: bitnami/kafka:3.7.0
-        command: ["/bin/sh", "-c"]
-        args:
+        - name: kafka
+          image: bitnami/kafka:3.7.0
+          command: ["/bin/sh", "-c"]
+          args:
           - |
-            # Ensure data directory exists
+            echo "Creating certs dir:"
+            mkdir -p /bitnami/kafka/config/certs ; echo $?
+            echo "Listing mounted cert files:"
+            ls -l /bitnami/kafka/config/certs/
             mkdir -p /bitnami/kafka/data
             
-            # Set fixed cluster ID
             export KAFKA_KRAFT_CLUSTER_ID="Gi6UrH-kT4i9NeINp9Sx4w"
             export KAFKA_CFG_CLUSTER_ID="$KAFKA_KRAFT_CLUSTER_ID"
-            
-            # Get numeric node ID from pod name (kafka-0 → 0, kafka-1 → 1)
             export NODE_ID=${POD_NAME##*-}
             export KAFKA_CFG_NODE_ID=$NODE_ID
 
-            # Explicitly format storage
-            echo "Formatting storage with cluster ID: $KAFKA_KRAFT_CLUSTER_ID"
-            /opt/bitnami/kafka/bin/kafka-storage.sh format \
-              --config /opt/bitnami/kafka/config/server.properties \
-              --cluster-id "$KAFKA_KRAFT_CLUSTER_ID" \
-              --ignore-formatted
-            
-            # Start Kafka
             exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
-        env:
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: KAFKA_KRAFT_CLUSTER_ID
-          value: "Gi6UrH-kT4i9NeINp9Sx4w"
-        - name: KAFKA_CFG_PROCESS_ROLES
-          value: "controller,broker"
-        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-          value: "0@kafka-0.kafka.monitoring.svc.cluster.local:9094,1@kafka-1.kafka.monitoring.svc.cluster.local:9094"
-        - name: KAFKA_CFG_LISTENERS
-          value: "CONTROLLER://:9094,CLIENT://:9092,BROKER://:9093"
-        - name: KAFKA_CFG_ADVERTISED_LISTENERS
-          value: "CLIENT://$(POD_NAME).kafka.monitoring.svc.cluster.local:9092,BROKER://$(POD_NAME).kafka.monitoring.svc.cluster.local:9093"
-        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
-          value: "CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT,BROKER:PLAINTEXT"
-        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
-          value: "BROKER"
-        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
-          value: "CONTROLLER"
-        ports:
-        - containerPort: 9092
-          name: client
-        - containerPort: 9093
-          name: broker
-        - containerPort: 9094
-          name: controller
-        volumeMounts:
-        - name: kafka-data
-          mountPath: /bitnami/kafka/data
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: KAFKA_KRAFT_CLUSTER_ID
+              value: "Gi6UrH-kT4i9NeINp9Sx4w"
+            - name: KAFKA_CFG_PROCESS_ROLES
+              value: "controller,broker"
+            - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+              value: "0@kafka-0.kafka.monitoring.svc.cluster.local:9094,1@kafka-1.kafka.monitoring.svc.cluster.local:9094"
+            - name: KAFKA_CFG_LISTENERS
+              value: "CONTROLLER://:9094,CLIENT://:9092,BROKER://:9093"
+            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+              value: "CLIENT://$(POD_NAME).kafka.monitoring.svc.cluster.local:9092,BROKER://$(POD_NAME).kafka.monitoring.svc.cluster.local:9093"
+            - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT,BROKER:SSL"
+            - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+              value: "BROKER"
+            - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_CFG_SSL_CLIENT_AUTH
+              value: required
+            - name: KAFKA_CFG_SSL_KEYSTORE_LOCATION
+              value: /bitnami/kafka/config/certs/kafka.keystore.jks
+            - name: KAFKA_CFG_SSL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ssl-jks
+                  key: kafka.keystore.password
+            - name: KAFKA_CFG_SSL_TRUSTSTORE_LOCATION
+              value: /bitnami/kafka/config/certs/kafka.truststore.jks
+            - name: KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-ssl-jks
+                  key: kafka.truststore.password
+            - name: KAFKA_CFG_LOG_LEVEL
+              value: DEBUG
+          ports:
+            - containerPort: 9092
+              name: client
+            - containerPort: 9093
+              name: broker
+            - containerPort: 9094
+              name: controller
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /bitnami/kafka/data
+            - name: kafka-certs
+              mountPath: /bitnami/kafka/config/certs
+              readOnly: true
+      volumes:
+        - name: kafka-certs
+          secret:
+            secretName: kafka-ssl-jks
   volumeClaimTemplates:
-  - metadata:
-      name: kafka-data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      resources:
-        requests:
-          storage: 10Gi
-      storageClassName: hostpath-delayed-binding
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: hostpath-delayed-binding
