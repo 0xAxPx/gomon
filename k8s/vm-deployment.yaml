@@ -33,6 +33,7 @@ metadata:
   name: victoria-metrics
   namespace: monitoring
 spec:
+  type: ClusterIP
   selector:
     app: victoria-metrics
   ports:
