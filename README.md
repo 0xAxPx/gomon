@@ -64,11 +64,11 @@ kubect get pods -A | grep dashboard
 kubectl apply -f k8s/admin-user.yaml
 ubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
 ### Create token
-kubectl -n kubernetes-dashboard create token admin-user
+kubectl -n monitoring create token admin-user
 ### Get proxy up
 kubectl proxy
 ### Open browser and appy token 
-http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+http://localhost:8001/api/v1/namespaces/monitoring/services/https:monitoring:/proxy/
 
 
 # Victoria Metrics
