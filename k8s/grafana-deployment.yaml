@@ -41,4 +41,3 @@ spec:
     - protocol: TCP
       port: 3000      # Service port
       targetPort: 3000 # Container port
-      nodePort: 32000 # Exposed port on host
