@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
-	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -156,16 +156,23 @@ func collectNet(wg *sync.WaitGroup, metric *pb.Metric) {
 }
 
 func main() {
-	go func() {
-		log.Println("Starting pprof server on localhost:8094")
-		log.Fatal(http.ListenAndServe("localhost:8094", nil))
-	}()
+	// Read Kafka env variable
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		log.Fatal("KAFKA_BROKERS environment variable is not set")
+	}
 
-	producer := kafka.NewKafkaProducer("localhost:9092", "metrics-topic")
+	// Read Kafka topic from environment variable
+	kafkaTopic := os.Getenv("KAFKA_TOPIC")
+	if kafkaTopic == "" {
+		log.Fatal("KAFKA_TOPIC environment variable is not set")
+	}
+
+	producer := kafka.NewKafkaProducer(kafkaBrokers, kafkaTopic)
 	defer producer.Close()
 
 	i := 0
-	t := 2
+	t := 10
 	for {
 		metric := &pb.Metric{
 			Timestamp: strconv.FormatInt(time.Now().Unix(), 10),

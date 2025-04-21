@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/segmentio/kafka-go"
@@ -20,10 +21,24 @@ import (
 
 // StartAggregator function consumes messages from Kafka and processes them
 func StartAggregator() error {
+
+	// Read Kafka env variable
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		log.Fatal("KAFKA_BROKERS environment variable is not set")
+	}
+
+	// Read Kafka topic from environment variable
+	kafkaTopic := os.Getenv("KAFKA_TOPIC")
+	if kafkaTopic == "" {
+		log.Fatal("KAFKA_TOPIC environment variable is not set")
+	}
+
+	log.Printf("Creating Kafka producer with brokers %v and topic %s", kafkaBrokers, kafkaTopic)
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: []string{"localhost:9092"},
+		Brokers: strings.Split(kafkaBrokers, ","),
 		GroupID: "metrics-group",
-		Topic:   "metrics-topic",
+		Topic:   kafkaTopic,
 	})
 	defer reader.Close()
 
@@ -157,9 +172,9 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string)
 	// Prepare the payload for VictoriaMetrics
 	data := map[string]interface{}{
 		"metric": map[string]string{
-			"__name__": metricName,       // Metric name
-			"job":      hostname,         // Job label
-			"instance": "localhost:9100", // Instance label
+			"__name__": metricName,           // Metric name
+			"job":      "metrics-aggregator", // Job label
+			"instance": hostname + "-agg",    // Instance label
 		},
 		"values":     []float64{float64(value)}, // Convert to float64 as required by VictoriaMetrics
 		"timestamps": []int64{timestamp * 1000}, // Convert to milliseconds
@@ -175,14 +190,18 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string)
 
 // sendToVictoriaMetrics sends data to VictoriaMetrics
 func sendToVictoriaMetrics(data map[string]interface{}) error {
-	url := "http://127.0.0.1:8428/api/v1/import"
+
+	victoriaMetrics := os.Getenv("VICTORIA_METRICS_URL")
+	if victoriaMetrics == "" {
+		log.Fatal("VICTORIA_METRICS_URL environment variable is not set")
+	}
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("could not marshal JSON: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", victoriaMetrics, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("could not create HTTP request: %v", err)
 	}

@@ -1,64 +1,93 @@
-Example plain HTML site using GitLab Pages.
 
-Learn more about GitLab Pages at https://pages.gitlab.io and the official
-documentation https://docs.gitlab.com/ce/user/project/pages/.
 
----
+1) Dockerfile.agent - docker file for agent service
+2) Dockerfile.aggregator
 
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+# Set up docker network so that services could communicate
+docker network create metrics-network
 
-- [GitLab CI](#gitlab-ci)
-- [GitLab User or Group Pages](#gitlab-user-or-group-pages)
-- [Did you fork this project?](#did-you-fork-this-project)
-- [Troubleshooting](#troubleshooting)
+alex@Alexs-MBP gomon % docker network ls | grep metrics-network
+2f4c697c06b5   metrics-network   bridge    local
 
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+# Pull Zookeeper Image
+docker pull bitnami/zookeeper:latest
 
-## GitLab CI
+# Start Zookeeper as container
+docker run -d \
+  --name zookeeper \
+  --network metrics-network \
+  -e ALLOW_ANONYMOUS_LOGIN=yes \
+  bitnami/zookeeper:latest
 
-This project's static Pages are built by [GitLab CI][ci], following the steps
-defined in [`.gitlab-ci.yml`](.gitlab-ci.yml):
+ # Pull Kafka Image 
+ docker pull bitnami/kafka:latest
 
-```
-image: busybox
+ # Start Kafka
+docker run -d \
+  --name kafka \
+  --network metrics-network \
+  -e KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181 \
+  -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092 \
+  -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 \
+  bitnami/kafka:latest
 
-pages:
-  stage: deploy
-  script:
-  - echo 'Nothing to do...'
-  artifacts:
-    paths:
-    - public
-    expire_in: 1 day
-  rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
-```
+# Create Kafka Topic
+@efa859e76970:/$ kafka-topics.sh --bootstrap-server kafka:9092 --create --topic metrics-topic --partitions 1 --replication-factor 1
+Created topic metrics-topic.
+@efa859e76970:/$ kafka-topics.sh --bootstrap-server kafka:9092 --list
+metrics-topic
 
-The above example expects to put all your HTML files in the `public/` directory.
+# Check Kafka messages
+docker exec -it kafka kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic metrics-topic --from-beginning
 
-## GitLab User or Group Pages
+# Start Agent Container
+docker build -t gomon-agent --no-cache -f Dockerfile.agent .
+docker run -d --name gomon-agent-container --network metrics-network gomon-agent
 
-To use this project as your user/group website, you will need one additional
-step: just rename your project to `namespace.gitlab.io`, where `namespace` is
-your `username` or `groupname`. This can be done by navigating to your
-project's **Settings**.
+# Start Aggregator Container
+docker build -t aggregator --no-cache -f Dockerfile.aggregator .
+docker run -d --name gomon-agg-container --network metrics-network aggregator
 
-Read more about [user/group Pages][userpages] and [project Pages][projpages].
+# Kubernetes
+kubectl create namespace monitoring
+kubectl get namespace
+kubectl config set-context --current --namespace=monitoring
 
-## Did you fork this project?
+## Run Zookeper
+kubectl apply -f k8s/zookeeper-deployment.yaml
+kubectl logs -f `kubectl get pods | grep zookeeper | awk '{print $1}'`
+or inside of pod
+kubectl exec --it `kubect get deployment | grep zookeeper | awk '{print $1}'`
 
-If you forked this project for your own use, please go to your project's
-**Settings** and remove the forking relationship, which won't be necessary
-unless you want to contribute back to the upstream project.
+## Set up Kub dashboard
+kubect get pods -A | grep dashboard
+kubectl apply -f k8s/admin-user.yaml
+ubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+### Create token
+kubectl -n kubernetes-dashboard create token admin-user
+### Get proxy up
+kubectl proxy
+### Open browser and appy token 
+http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
 
-## Troubleshooting
 
-1. CSS is missing! That means that you have wrongly set up the CSS URL in your
-   HTML files. Have a look at the [index.html] for an example.
+# Victoria Metrics
+kubectl apply -f k8s/vm-deployment.yaml
+kubectl port-forward -n monitoring svc/victoria-metrics 8428:8428
 
-[ci]: https://about.gitlab.com/gitlab-ci/
-[index.html]: https://gitlab.com/pages/plain-html/blob/master/public/index.html
-[userpages]: https://docs.gitlab.com/ce/user/project/pages/introduction.html#user-or-group-pages
-[projpages]: https://docs.gitlab.com/ce/user/project/pages/introduction.html#project-pages
+# Grafana
+kubectl apply -f k8s/grafana-deployment.yaml
+
+# Utility for Deployment & Services
+kubectl delete deployments --all --all-namespaces
+kubectl delete statefulsets --all --all-namespaces
+kubectl delete replicasets --all --all-namespaces
+kubectl delete daemonsets --all --all-namespaces
+
+kubectl describe statefulset kafka -n monitoring
+
+
+
+
+
+

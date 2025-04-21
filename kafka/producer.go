@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -12,11 +13,14 @@ type KafkaProducer struct {
 	Writer *kafka.Writer
 }
 
-func NewKafkaProducer(broker string, topic string) *KafkaProducer {
-	log.Printf("Creating Kafka producer %s with topic %s", broker, topic)
+func NewKafkaProducer(brokers string, topic string) *KafkaProducer {
+	// Split the brokers string into a slice of broker addresses
+	brokerList := strings.Split(brokers, ",")
+
+	log.Printf("Creating Kafka producer with brokers %v and topic %s", brokerList, topic)
 	return &KafkaProducer{
 		Writer: kafka.NewWriter(kafka.WriterConfig{
-			Brokers:  []string{broker},
+			Brokers:  brokerList, // Pass the slice of broker addresses
 			Topic:    topic,
 			Balancer: &kafka.LeastBytes{},
 		}),
