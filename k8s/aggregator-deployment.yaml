@@ -29,14 +29,7 @@ spec:
           value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
           value: "metrics-topic"
-        - name: VICTORIA_METRICS_URL # Victoria Metrics service URL
-          value: http://10.107.154.4:8428/api/v1/import # Assuming service name is victoria-metrics
-        volumeMounts:  # If you need persistent storage
-          # - name: agg-data
-          #   mountPath: /data
-      volumes: # If you need persistent storage
-        # - name: agg-data
-        #   persistentVolumeClaim:
-        #     claimName: agg-pvc
+        - name: VICTORIA_METRICS_URL
+          value: http://victoria-metrics.monitoring.svc.cluster.local:8428/api/v1/import
       imagePullSecrets: # If your Docker Hub repo is private
       - name: regcred # Name of your ImagePullSecret
