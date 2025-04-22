@@ -27,12 +27,12 @@ jobs:
 
       - name: Build and push agent
         run: |
-          docker build -t ragazzo271985/agent:latest -t ragazzo271985/agent:${{ steps.vars.outputs.sha_short }} -f Dockerfile.agent .
-          docker push ragazzo271985/agent:latest
-          docker push ragazzo271985/agent:${{ steps.vars.outputs.sha_short }}
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/agent:latest -t ${{ secrets.DOCKER_USERNAME }}/agent:${{ steps.vars.outputs.sha_short }} -f Dockerfile.agent .
+          docker push ${{ secrets.DOCKER_USERNAME }}/agent:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/agent:${{ steps.vars.outputs.sha_short }}
 
       - name: Build and push aggregator
         run: |
-          docker build -t ragazzo271985/aggregator:latest -t ragazzo271985/aggregator:${{ steps.vars.outputs.sha_short }} -f Dockerfile.aggregator .
-          docker push ragazzo271985/aggregator:latest
-          docker push ragazzo271985/aggregator:${{ steps.vars.outputs.sha_short }}
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/aggregator:latest -t ${{ secrets.DOCKER_USERNAME }}/aggregator:${{ steps.vars.outputs.sha_short }} -f Dockerfile.aggregator .
+          docker push ${{ secrets.DOCKER_USERNAME }}/aggregator:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/aggregator:${{ steps.vars.outputs.sha_short }}
