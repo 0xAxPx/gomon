@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/0xAxPx/gomon.git
     targetRevision: main
-    path: argocd
+    path: k8s
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
