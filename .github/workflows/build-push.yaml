@@ -23,18 +23,29 @@ jobs:
       - name: Login to DockerHub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Extract short commit SHA
+      - name: Extract variables
         id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Printing secrets
+        run: |
+          echo "{{ secrets.DOCKER_USERNAME }}"
+          echo "${{ secrets.DOCKER_USERNAME }}"
+          echo "{{ secrets.DOCKER_HUB_NAME }}"
+          echo "${{ secrets.DOCKER_HUB_NAME }}"
 
       - name: Build and push agent
         run: |
-          docker build -t ${{ secrets.DOCKER_HUB_NAME }}/agent:latest -t ${{ secrets.DOCKER_HUB_NAME }}/agent:${{ steps.vars.outputs.sha_short }} -f Dockerfile.agent .
-          docker push ${{ secrets.DOCKER_HUB_NAME }}/agent:latest
-          docker push ${{ secrets.DOCKER_HUB_NAME }}/agent:${{ steps.vars.outputs.sha_short }}
+          docker buildx build --push \
+            -t ${{ secrets.DOCKER_HUB_NAME }}/agent:latest \
+            -t ${{ secrets.DOCKER_HUB_NAME }}/agent:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
+            -f Dockerfile.agent .
 
       - name: Build and push aggregator
         run: |
-          docker build -t ${{ secrets.DOCKER_HUB_NAME }}/aggregator:latest -t ${{ secrets.DOCKER_HUB_NAME }}/aggregator:${{ steps.vars.outputs.sha_short }} -f Dockerfile.aggregator .
-          docker push ${{ secrets.DOCKER_HUB_NAME }}/aggregator:latest
-          docker push ${{ secrets.DOCKER_HUB_NAME }}/aggregator:${{ steps.vars.outputs.sha_short }}
+          docker buildx build --push \
+            -t ${{ secrets.DOCKER_HUB_NAME }}/aggregator:latest \
+            -t ${{ secrets.DOCKER_HUB_NAME }}/aggregator:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
+            -f Dockerfile.aggregator .
