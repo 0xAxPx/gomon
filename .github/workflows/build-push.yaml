@@ -29,13 +29,6 @@ jobs:
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
-      - name: Printing secrets
-        run: |
-          echo "{{ secrets.DOCKER_USERNAME }}"
-          echo "${{ secrets.DOCKER_USERNAME }}"
-          echo "{{ secrets.DOCKER_HUB_NAME }}"
-          echo "${{ secrets.DOCKER_HUB_NAME }}"
-
       - name: Build and push agent
         run: |
           docker buildx build --push \
