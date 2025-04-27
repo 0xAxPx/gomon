@@ -187,6 +187,7 @@ func main() {
 
 		wg.Wait()
 
+		// Marshal metric
 		data, err := proto.Marshal(metric)
 		if err != nil {
 			log.Fatalf("Failed to marshal proto: %v", err)
