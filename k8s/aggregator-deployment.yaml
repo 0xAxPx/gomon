@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
       - name: aggregator
-        image: ragazzo271985/aggregator:k8s-1 # Replace with your Docker Hub image name
-        imagePullPolicy: Always # Or IfPresent/Never for production
+        image: ragazzo271985/aggregator:k8s-1
+        imagePullPolicy: Always
         resources:
           requests:
             cpu: 100m
@@ -31,5 +31,5 @@ spec:
           value: "metrics-topic"
         - name: VICTORIA_METRICS_URL
           value: http://victoria-metrics.monitoring.svc.cluster.local:8428/api/v1/import
-      imagePullSecrets: # If your Docker Hub repo is private
-      - name: regcred # Name of your ImagePullSecret
+      imagePullSecrets:
+      - name: regcred

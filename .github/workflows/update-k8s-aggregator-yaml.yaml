@@ -1,0 +1,29 @@
+name: Update Aggregator Deployment YAML
+
+on:
+  repository_dispatch:
+    types: [update-aggregator-yaml]
+
+permissions:
+  contents: write
+
+jobs:
+  update-deployment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Update aggregator-deployment.yaml image tag
+        run: |
+          TAG="${{ github.event.client_payload.tag }}"
+          sed -i "s|image: .*aggregator:.*|image: ragazzo271985/aggregator:$TAG|g" k8s/aggregator-deployment.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "Alexander Peshkov"
+          git config user.email "alexander.peshkov27@gmail.com"
+          git add k8s/aggregator-deployment.yaml
+          git commit -m "Update aggregator image to $TAG"
+          git push
