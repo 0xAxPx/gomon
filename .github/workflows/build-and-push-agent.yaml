@@ -33,4 +33,11 @@ jobs:
             -t ${{ secrets.DOCKER_HUB_NAME }}/agent:latest \
             -t ${{ secrets.DOCKER_HUB_NAME }}/agent:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
             -f Dockerfile.agent .
+      
+      - name: Trigger update of k8s deployment YAML
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          event-type: update-agent-yaml
+          client-payload: '{"tag": "${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}"}'
 
