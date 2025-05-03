@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: aggregator
-        image: ragazzo271985/aggregator:k8s-1
+        image: ragazzo271985/aggregator:20250503-5d343c3
         imagePullPolicy: Always
         resources:
           requests:
