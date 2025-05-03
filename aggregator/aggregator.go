@@ -220,7 +220,6 @@ func sendToVictoriaMetrics(data map[string]interface{}) error {
 	log.Printf("Response Status: %d", resp.StatusCode)
 	log.Printf("Response Body: %s", string(body))
 
-	//Check status code
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		log.Printf("Successfully sent metrics to VictoriaMetrics. Status: %s", resp.Status)
 	} else {
