@@ -1,0 +1,23 @@
+name: Update Agent Deployment YAML
+
+on:
+  repository_dispatch:
+    types: [update-agent-yaml]
+
+jobs:
+  update-deployment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Update agent.yaml image tag
+        run: |
+          TAG="${{ github.event.client_payload.tag }}"
+          sed -i "s|image: .*agent:.*|image: ragazzo271985/agent:$TAG|g" k8s/agent-deployment.yaml
+          git config user.name "Alexander Peshkov"
+          git config user.email "alexander.peshkov27@gmail.com"
+          git add k8s/agent-deployment.yaml
+          git commit -m "Update agent image to $TAG"
+          git push
