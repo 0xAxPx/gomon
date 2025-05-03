@@ -200,7 +200,6 @@ func main() {
 		log.Printf("Finished collecting stats with iterator: %d, waiting %dsec", i, t)
 		time.Sleep(time.Duration(t) * time.Second)
 
-		// Unmarshal the serialized data back into the Metric struct
 		// newMetric := &pb.Metric{}
 		// err = proto.Unmarshal(data, newMetric)
 		// if err != nil {
