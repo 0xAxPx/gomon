@@ -29,7 +29,15 @@ jobs:
 
       - name: Build and push aggregator
         run: |
-          docker buildx build --push \
+          docker buildx build --platform linux/arm64 \
+            --push \
             -t ${{ secrets.DOCKER_HUB_NAME }}/aggregator:latest \
             -t ${{ secrets.DOCKER_HUB_NAME }}/aggregator:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
             -f Dockerfile.aggregator .
+      
+      - name: Trigger update of k8s deployment YAML
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          event-type: update-aggregator-yaml
+          client-payload: '{"tag": "${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}"}'
