@@ -193,7 +193,6 @@ func main() {
 		}
 		log.Printf("Serialized Metric: %v", data)
 
-		// Send message
 		if err := producer.SendMessage(data); err != nil {
 			log.Printf("Error sending message: %v", err)
 		}
