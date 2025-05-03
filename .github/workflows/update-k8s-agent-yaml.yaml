@@ -15,10 +15,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Update agent.yaml image tag
+      - name: Update agent-deployment.yaml image tag
         run: |
           TAG="${{ github.event.client_payload.tag }}"
-          sed -i "s|image: .*agent:.*|image: ragazzo271985/agent:$TAG|g" k8s/agent-deployment.yaml
+          sed -i "s|image: .*agent:.*|image: ragazzo271985/gomon-agent:$TAG|g" k8s/agent-deployment.yaml
 
       - name: Commit and push changes
         run: |
