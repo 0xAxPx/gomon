@@ -1,0 +1,36 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'agent/**'
+      - 'Dockerfile.agent'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Extract variables
+        id: vars
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Build and push agent
+        run: |
+          docker buildx build --push \
+            -t ${{ secrets.DOCKER_HUB_NAME }}/agent:latest \
+            -t ${{ secrets.DOCKER_HUB_NAME }}/agent:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
+            -f Dockerfile.agent .
+
