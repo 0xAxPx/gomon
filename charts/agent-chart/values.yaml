@@ -1,0 +1,18 @@
+namespace: monitoring
+replicaCount: 1
+
+image:
+  repository: ragazzo271985/gomon-agent
+  tag: 20250503-f5ef22a
+
+env:
+  kafkaBrokers: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092"
+  kafkaTopic: "metrics-topic"
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "250m"
+  limits:
+    memory: "128Mi"
+    cpu: "500m"
