@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/0xAxPx/gomon.git'
-    targetRevision: HEAD
+    targetRevision: main
     path: charts/agent-chart
     helm:
       valueFiles:
@@ -19,5 +19,3 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
