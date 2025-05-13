@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: hhttps://github.com/0xAxPx/gomon.git
+    repoURL: https://github.com/0xAxPx/gomon.git
     targetRevision: HEAD
     path: charts/agent-chart
     helm:
