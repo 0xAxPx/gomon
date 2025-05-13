@@ -1,0 +1,38 @@
+# Global Kafka config
+clusterId: "Gi6UrH-kT4i9NeINp9Sx4w"
+replicas: 2
+image:
+  repository: bitnami/kafka
+  tag: 3.7.0
+
+# Network configuration
+serviceName: kafka
+dnsDomain: kafka.monitoring.svc.cluster.local
+listeners:
+  controller: 9094
+  client: 9092
+  broker: 9093
+
+# Security
+ssl:
+  secretName: kafka-ssl-jks
+  keystorePasswordKey: kafka.keystore.password
+  truststorePasswordKey: kafka.truststore.password
+
+# Storage
+persistence:
+  enabled: true
+  storageClass: hostpath-delayed-binding
+  size: 10Gi
+
+# Resources
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Service
+service:
+  clientPort: 9092
+  brokerPort: 9093
+  controllerPort: 9094
