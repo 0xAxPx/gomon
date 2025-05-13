@@ -8,11 +8,14 @@ spec:
   source:
     repoURL: https://github.com/0xAxPx/gomon.git
     targetRevision: HEAD
-    path: charts/agent-chart
+    path: charts/gomon-stack
     helm:
       values: |
-        image:
-          tag: 20250503-f5ef22a
+        agent:
+          image:
+            tag: "20250503-f5ef22a"
+        kafka:
+          replicas: 2
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

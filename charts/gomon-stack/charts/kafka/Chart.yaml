@@ -1,0 +1,4 @@
+apiVersion: v2
+name: kafka
+description: Kafka deployment for GoMon
+version: 0.1.0
