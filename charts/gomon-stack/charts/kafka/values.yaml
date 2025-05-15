@@ -36,3 +36,9 @@ service:
   clientPort: 9092
   brokerPort: 9093
   controllerPort: 9094
+
+# Persistence
+persistence:
+  enabled: true
+  storageClass: hostpath-delayed-binding  # Must match the name in your template
+  size: 10Gi

@@ -2,7 +2,13 @@ apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: hostpath-delayed-binding
-  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: {{ include "kafka.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
 provisioner: docker.io/hostpath
-volumeBindingMode: Immediate
+volumeBindingMode: WaitForFirstConsumer  # Changed from Immediate (better for StatefulSets)
 reclaimPolicy: Delete

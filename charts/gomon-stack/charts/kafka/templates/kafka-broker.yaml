@@ -89,12 +89,19 @@ spec:
             secretName: {{ .Values.ssl.secretName }}
   {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
-    - metadata:
-        name: kafka-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: {{ .Values.persistence.size }}
-        storageClassName: {{ .Values.persistence.storageClass }}
+  - metadata:
+      name: kafka-data
+      labels:
+        app.kubernetes.io/name: {{ include "kafka.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        meta.helm.sh/release-name: {{ .Release.Name }}
+        meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+      storageClassName: {{ .Values.persistence.storageClass }}
   {{- end }}

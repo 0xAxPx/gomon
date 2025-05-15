@@ -1,19 +1,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "kafka.fullname" . }}
-  labels:
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/name: {{ include "kafka.name" . }}
+  name: kafka  # Use simple fixed name to match StatefulSet
+  namespace: {{ .Release.Namespace }}
 spec:
   clusterIP: None
   ports:
-  - port: {{ .Values.service.clientPort }}
-    name: client
-  - port: {{ .Values.service.brokerPort }}
-    name: broker
-  - port: {{ .Values.service.controllerPort }}
-    name: controller
+    - port: {{ .Values.service.clientPort }}
+      name: client
+    - port: {{ .Values.service.brokerPort }}
+      name: broker
+    - port: {{ .Values.service.controllerPort }}
+      name: controller
   selector:
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/name: {{ include "kafka.name" . }}
+    app: kafka  # Must match StatefulSet's pod labels
