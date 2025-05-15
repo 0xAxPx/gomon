@@ -1,4 +1,4 @@
 apiVersion: v2
-name: gomon-main
+name: agent-chart
 description: Monitoring stack for GoMon
 version: 0.1.0

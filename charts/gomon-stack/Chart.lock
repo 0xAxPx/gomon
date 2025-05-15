@@ -1,0 +1,9 @@
+dependencies:
+- name: agent-chart
+  repository: file://./charts/agent-chart
+  version: 0.1.0
+- name: kafka
+  repository: file://./charts/kafka
+  version: 0.1.0
+digest: sha256:786a23546297c80a613d65ef0575b364c8fe5ae7b58959272740cfc5dd22af77
+generated: "2025-05-13T19:57:19.987365+01:00"

@@ -1,5 +1,12 @@
 apiVersion: v2
 name: gomon-stack
-description: Complete monitoring stack for GoMon
+description: Complete monitoring stack
 type: application
 version: 0.1.0
+dependencies:
+  - name: agent-chart
+    version: "0.1.0"
+    repository: "file://./charts/agent-chart"
+  - name: kafka
+    version: "0.1.0"
+    repository: "file://./charts/kafka"
