@@ -42,7 +42,7 @@ spec:
               value: "{{ .Values.clusterId }}"
             - name: KAFKA_CFG_PROCESS_ROLES
               value: "controller,broker"
-              - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+            - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
               value: {{ range $i := until (int .Values.replicas) }}{{ if $i }},{{ end }}{{ $i }}@kafka-{{ $i }}.kafka.{{ $.Release.Namespace }}.svc.cluster.local:{{ $.Values.listeners.controller }}{{ end }}
             - name: KAFKA_CFG_LISTENERS
               value: "CONTROLLER://:{{ .Values.listeners.controller }},CLIENT://:{{ .Values.listeners.client }},BROKER://:{{ .Values.listeners.broker }}"
