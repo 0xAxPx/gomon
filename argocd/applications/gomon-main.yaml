@@ -9,6 +9,9 @@ spec:
     repoURL: https://github.com/0xAxPx/gomon.git
     targetRevision: main
     path: k8s
+    directory:
+      recurse: true 
+      include: '*.yaml'
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
