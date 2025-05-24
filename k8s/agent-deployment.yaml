@@ -20,7 +20,7 @@ spec:
         - name: KAFKA_BROKERS
           value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092,kafka-2.kafka.monitoring.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
-          value: "metrics-v2"
+          value: "metrics-v3"
         - name: KAFKA_REQUEST_TIMEOUT_MS
           value: "30000"
         - name: KAFKA_RETRIES
