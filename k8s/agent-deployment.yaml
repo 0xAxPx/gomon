@@ -18,9 +18,13 @@ spec:
         image: ragazzo271985/gomon-agent:20250503-f5ef22a
         env:
         - name: KAFKA_BROKERS
-          value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092"
+          value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092,kafka-2.kafka.monitoring.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
-          value: "metrics-topic"
+          value: "metrics-v2"
+        - name: KAFKA_REQUEST_TIMEOUT_MS
+          value: "30000"
+        - name: KAFKA_RETRIES
+          value: "5"
         resources:
           requests:
             memory: "64Mi"

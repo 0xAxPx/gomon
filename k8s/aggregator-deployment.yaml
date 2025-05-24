@@ -26,9 +26,17 @@ spec:
             memory: 512Mi
         env:
         - name: KAFKA_BROKERS
-          value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092"
+          value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092,kafka-2.kafka.monitoring.svc.cluster.local:9092"
         - name: KAFKA_TOPIC
-          value: "metrics-topic"
+          value: "metrics-v2"
+        - name: KAFKA_AUTO_OFFSET_RESET
+          value: "earliest"
+        - name: KAFKA_REQUEST_TIMEOUT_MS
+          value: "30000"
+        - name: KAFKA_RETRIES
+          value: "5"
+        - name: KAFKA_SESSION_TIMEOUT_MS
+          value: "45000"
         - name: VICTORIA_METRICS_URL
           value: http://victoria-metrics.monitoring.svc.cluster.local:8428/api/v1/import
       imagePullSecrets:
