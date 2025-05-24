@@ -5,7 +5,7 @@ metadata:
   namespace: monitoring
 spec:
   serviceName: "kafka"
-  replicas: 2
+  replicas: 3
   podManagementPolicy: Parallel
   selector:
     matchLabels:
@@ -46,7 +46,7 @@ spec:
             - name: KAFKA_CFG_PROCESS_ROLES
               value: "controller,broker"
             - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-              value: "0@kafka-0.kafka.monitoring.svc.cluster.local:9094,1@kafka-1.kafka.monitoring.svc.cluster.local:9094"
+              value: "0@kafka-0.kafka.monitoring.svc.cluster.local:9094,1@kafka-1.kafka.monitoring.svc.cluster.local:9094,2@kafka-2.kafka.monitoring.svc.cluster.local:9094"
             - name: KAFKA_CFG_LISTENERS
               value: "CONTROLLER://:9094,CLIENT://:9092,BROKER://:9093"
             - name: KAFKA_CFG_ADVERTISED_LISTENERS
@@ -61,6 +61,8 @@ spec:
               value: required
             - name: KAFKA_CFG_SSL_KEYSTORE_LOCATION
               value: /bitnami/kafka/config/certs/kafka.keystore.jks
+            - name: KAFKA_CFG_LOG_LEVEL
+              value: DEBUG
             - name: KAFKA_CFG_SSL_KEYSTORE_PASSWORD
               valueFrom:
                 secretKeyRef:

@@ -27,3 +27,18 @@ spec:
   storageClassName: hostpath-delayed-binding
   hostPath:
     path: /tmp/kafka-pv/kafka-data-1
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-kafka-2
+  namespace: monitoring
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: hostpath-delayed-binding
+  hostPath:
+    path: /tmp/kafka-pv/kafka-data-2
