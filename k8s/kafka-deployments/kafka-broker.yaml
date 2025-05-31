@@ -15,37 +15,6 @@ spec:
       labels:
         app: kafka
     spec:
-      hostname: $(POD_NAME)
-      subdomain: kafka
-      dnsPolicy: ClusterFirst
-      initContainers:
-        - name: copy-certs
-          image: busybox:1.35
-          command:
-            - sh
-            - -c
-            - |
-              NODE_ID=${POD_NAME##*-}
-              echo "Copying certs for kafka-$NODE_ID ..."
-              cp -r /jks-${NODE_ID}/* /bitnami/kafka/config/certs/
-              ls -l /bitnami/kafka/config/certs
-          env:
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-          volumeMounts:
-            - name: kafka-certs
-              mountPath: /bitnami/kafka/config/certs
-            - name: kafka-0-jks
-              mountPath: /jks-0
-              readOnly: true
-            - name: kafka-1-jks
-              mountPath: /jks-1
-              readOnly: true
-            - name: kafka-2-jks
-              mountPath: /jks-2
-              readOnly: true
       containers:
         - name: kafka
           image: bitnami/kafka:3.7.0
@@ -73,54 +42,23 @@ spec:
             - name: KAFKA_CFG_ADVERTISED_LISTENERS
               value: "CLIENT://$(POD_NAME).kafka.monitoring.svc.cluster.local:9092,BROKER://$(POD_NAME).kafka.monitoring.svc.cluster.local:9093"
             - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
-              value: "CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT,BROKER:SSL"
+              value: "CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT"
             - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
               value: "BROKER"
             - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
-            - name: KAFKA_CFG_SSL_CLIENT_AUTH
-              value: "required"
-            - name: KAFKA_CFG_SSL_KEYSTORE_LOCATION
-              value: "/bitnami/kafka/config/certs/kafka.keystore.jks"
-            - name: KAFKA_CFG_SSL_TRUSTSTORE_LOCATION
-              value: "/bitnami/kafka/config/certs/kafka.truststore.jks"
-            - name: KAFKA_CFG_SSL_KEYSTORE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-0-tls-jks
-                  key: keystore-password
-            - name: KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: kafka-0-tls-jks
-                  key: truststore-password
+            - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+              value: "CLIENT"
             - name: KAFKA_CFG_LOG_LEVEL
-              value: "DEBUG"
+              value: "INFO"
           ports:
             - containerPort: 9092
               name: client
-            - containerPort: 9093
-              name: broker
             - containerPort: 9094
               name: controller
           volumeMounts:
             - name: kafka-data
               mountPath: /bitnami/kafka/data
-            - name: kafka-certs
-              mountPath: /bitnami/kafka/config/certs
-              readOnly: true
-      volumes:
-        - name: kafka-certs
-          emptyDir: {}
-        - name: kafka-0-jks
-          secret:
-            secretName: kafka-0-tls-jks
-        - name: kafka-1-jks
-          secret:
-            secretName: kafka-1-tls-jks
-        - name: kafka-2-jks
-          secret:
-            secretName: kafka-2-tls-jks
   volumeClaimTemplates:
     - metadata:
         name: kafka-data
