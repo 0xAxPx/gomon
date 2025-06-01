@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: agent
-        image: ragazzo271985/gomon-agent:20250601-e73b43c
+        image: ragazzo271985/gomon-agent:20250601-8aa9dbb
         env:
         - name: KAFKA_BROKERS
           value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092,kafka-2.kafka.monitoring.svc.cluster.local:9092"
