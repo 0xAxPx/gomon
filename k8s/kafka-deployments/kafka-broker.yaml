@@ -49,6 +49,12 @@ spec:
               value: "CONTROLLER"
             - name: KAFKA_CFG_LOG_LEVEL
               value: "INFO"
+            - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+              value: "false"
+            - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+              value: "3"
+            - name: KAFKA_CFG_NUM_PARTITIONS
+              value: "3"
           ports:
             - containerPort: 9092
               name: client
