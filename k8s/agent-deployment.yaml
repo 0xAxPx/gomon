@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: agent
-        image: ragazzo271985/gomon-agent:20250503-f5ef22a
+        image: ragazzo271985/gomon-agent:20250503
         env:
         - name: KAFKA_BROKERS
           value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092,kafka-2.kafka.monitoring.svc.cluster.local:9092"
@@ -25,6 +25,10 @@ spec:
           value: "30000"
         - name: KAFKA_RETRIES
           value: "5"
+        # Add volume mount for logs
+        volumeMounts:
+        - name: agent-logs
+          mountPath: /var/log
         resources:
           requests:
             memory: "64Mi"
@@ -32,3 +36,13 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "500m"
+      initContainers:
+      - name: init-log-dir
+        image: busybox
+        command: ["sh", "-c", "mkdir -p /var/log && chmod 777 /var/log"]
+        volumeMounts:
+         - name: agent-logs
+           mountPath: /var/log
+      volumes:
+      - name: agent-logs
+        emptyDir: {}
