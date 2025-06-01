@@ -4,6 +4,7 @@ import (
 	"log"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -155,18 +156,47 @@ func collectNet(wg *sync.WaitGroup, metric *pb.Metric) {
 	}
 }
 
-func main() {
-	// Read Kafka env variable
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-	if kafkaBrokers == "" {
-		log.Fatal("KAFKA_BROKERS environment variable is not set")
+func initLogger() *log.Logger {
+	// First create stdout logger for debugging
+	bootstrapLog := log.New(os.Stdout, "[INIT] ", log.LstdFlags|log.Lshortfile)
+	bootstrapLog.Println("Logger initialization started")
+
+	logDir := "/var/log"
+	logFile := filepath.Join(logDir, "agent.log")
+
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		bootstrapLog.Fatalf("Failed to open log file: %v", err)
 	}
 
-	// Read Kafka topic from environment variable
+	if _, err := os.Stat(logFile); err != nil {
+		bootstrapLog.Fatalf("Log file verification failed: %v", err)
+	}
+	bootstrapLog.Printf("Successfully initialized file logging to %s", logFile)
+
+	return log.New(file, "", log.LstdFlags|log.Lshortfile)
+}
+
+func main() {
+	logger := initLogger()
+	defer func() {
+		if f, ok := logger.Writer().(*os.File); ok {
+			f.Close()
+		}
+	}()
+
+	logger.Println("MAIN STARTED")
+
+	// Read Kafka env variables
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		logger.Fatal("KAFKA_BROKERS environment variable is not set")
+	}
 	kafkaTopic := os.Getenv("KAFKA_TOPIC")
 	if kafkaTopic == "" {
-		log.Fatal("KAFKA_TOPIC environment variable is not set")
+		logger.Fatal("KAFKA_TOPIC environment variable is not set")
 	}
+	logger.Printf("Kafka config - Brokers: %s, Topic: %s", kafkaBrokers, kafkaTopic)
 
 	producer := kafka.NewKafkaProducer(kafkaBrokers, kafkaTopic)
 	defer producer.Close()
