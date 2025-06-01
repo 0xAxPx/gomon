@@ -1,74 +1,16 @@
-apiVersion: apps/v1
-kind: StatefulSet
+apiVersion: v1
+kind: Service
 metadata:
   name: kafka
   namespace: monitoring
 spec:
-  serviceName: "kafka"
-  replicas: 3
-  podManagementPolicy: Parallel
+  clusterIP: None 
+  ports:
+  - port: 9092
+    name: client
+  - port: 9093
+    name: broker
+  - port: 9094
+    name: controller
   selector:
-    matchLabels:
-      app: kafka
-  template:
-    metadata:
-      labels:
-        app: kafka
-    spec:
-      hostname: $(POD_NAME)
-      subdomain: kafka
-      dnsPolicy: ClusterFirst
-      containers:
-        - name: kafka
-          image: bitnami/kafka:3.7.0
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              echo "Starting Kafka in PLAINTEXT mode"
-              export KAFKA_KRAFT_CLUSTER_ID="Gi6UrH-kT4i9NeINp9Sx4w"
-              export NODE_ID=${POD_NAME##*-}
-              export KAFKA_CFG_NODE_ID=$NODE_ID
-              exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
-          env:
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: KAFKA_KRAFT_CLUSTER_ID
-              value: "Gi6UrH-kT4i9NeINp9Sx4w"
-            - name: KAFKA_CFG_PROCESS_ROLES
-              value: "controller,broker"
-            - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-              value: "0@kafka-0.kafka.monitoring.svc.cluster.local:9094,1@kafka-1.kafka.monitoring.svc.cluster.local:9094,2@kafka-2.kafka.monitoring.svc.cluster.local:9094"
-            - name: KAFKA_CFG_LISTENERS
-              value: "CONTROLLER://:9094,CLIENT://:9092,BROKER://:9093"
-            - name: KAFKA_CFG_ADVERTISED_LISTENERS
-              value: "CLIENT://$(POD_NAME).kafka.monitoring.svc.cluster.local:9092,BROKER://$(POD_NAME).kafka.monitoring.svc.cluster.local:9093"
-            - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
-              value: "CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT,BROKER:PLAINTEXT"
-            - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
-              value: "BROKER"
-            - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
-              value: "CONTROLLER"
-            - name: KAFKA_CFG_LOG_LEVEL
-              value: DEBUG
-          ports:
-            - containerPort: 9092
-              name: client
-            - containerPort: 9093
-              name: broker
-            - containerPort: 9094
-              name: controller
-          volumeMounts:
-            - name: kafka-data
-              mountPath: /bitnami/kafka/data
-      volumes: []
-  volumeClaimTemplates:
-    - metadata:
-        name: kafka-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 10Gi
-        storageClassName: hostpath-delayed-binding
+    app: kafka
