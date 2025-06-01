@@ -240,44 +240,63 @@ func main() {
 func formatMetricForLog(m *pb.Metric) string {
 	var builder strings.Builder
 
-	// Basic info
+	// Basic info with hostname validation
+	hostname := m.Hostname
+	if hostname == "" {
+		hostname = "[unknown-host]"
+	}
 	builder.WriteString(fmt.Sprintf("Host: %s | Timestamp: %s\n",
-		m.Hostname, m.Timestamp))
+		hostname, m.Timestamp))
 
 	// CPU
 	builder.WriteString(fmt.Sprintf("CPU: %.2f%%\n", m.CpuUsagePercent))
 
-	// Memory
+	// Memory - convert GB to more readable format
 	builder.WriteString(fmt.Sprintf(
-		"Memory: %.2f%% used (%dGB/%dGB free)\n",
+		"Memory: %.2f%% used (%.2fGB/%.2fGB free)\n",
 		m.MemoryUsedPercent,
-		m.MemoryUsedGb,
-		m.MemoryTotalGb,
+		float64(m.MemoryUsedGb),
+		float64(m.MemoryTotalGb),
 	))
 
-	// Disk
+	// Disk - filter out system mounts and format sizes properly
 	if len(m.DiskStats) > 0 {
 		builder.WriteString("Disks:\n")
 		for _, disk := range m.DiskStats {
+			mountPoint := disk.GetMountpoint()
+			// Skip system mounts in logs
+			if strings.HasPrefix(mountPoint, "/etc/") ||
+				strings.HasPrefix(mountPoint, "/dev/") {
+				continue
+			}
+
+			// Convert bytes to GB (assuming the proto uses bytes)
+			totalGB := float64(disk.GetTotalGb()) / 1024 / 1024 / 1024
+			usedGB := float64(disk.GetUsedGb()) / 1024 / 1024 / 1024
+
 			builder.WriteString(fmt.Sprintf(
-				"  %s: %.2f%% used (%dGB/%dGB free)\n",
-				disk.GetMountpoint(),
+				"  %s: %.2f%% used (%.2fGB/%.2fGB)\n",
+				mountPoint,
 				disk.GetUsedPercent(),
-				disk.GetUsedGb(),
-				disk.GetTotalGb(),
+				usedGB,
+				totalGB,
 			))
 		}
 	}
 
-	// Network
+	// Network - filter aggregate interfaces
 	if len(m.NetStats) > 0 {
 		builder.WriteString("Network:\n")
 		for _, net := range m.NetStats {
+			ifName := net.GetInterfaceName()
+			if ifName == "all" || ifName == "" {
+				continue
+			}
 			builder.WriteString(fmt.Sprintf(
-				"  %s: Tx %dMB, Rx %dMB\n",
-				net.GetInterfaceName(),
-				net.GetBytesReceived(),
-				net.GetBytesSent(),
+				"  %s: Tx %.2fMB, Rx %.2fMB\n",
+				ifName,
+				float64(net.GetBytesReceived()),
+				float64(net.GetBytesSent()),
 			))
 		}
 	}
