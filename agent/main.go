@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	_ "net/http/pprof"
 	"os"
@@ -208,27 +209,78 @@ func main() {
 			Timestamp: strconv.FormatInt(time.Now().Unix(), 10),
 		}
 		i++
+
 		var wg sync.WaitGroup
 		wg.Add(4)
 		go collectCPU(&wg, metric)
 		go collectMemory(&wg, metric)
 		go collectDisk(&wg, metric)
 		go collectNet(&wg, metric)
-
 		wg.Wait()
 
 		data, err := proto.Marshal(metric)
 		if err != nil {
-			log.Fatalf("Failed to marshal proto: %v", err)
+			logger.Printf("ERROR: Failed to marshal metric (Iteration %d): %v", i, err)
+			continue
 		}
-		log.Printf("Serialized Metric: %v", data)
+
+		// Log the actual metric data being sent
+		logger.Printf("Sending to Kafka (Iteration %d):\n%s", i, formatMetricForLog(metric))
 
 		if err := producer.SendMessage(data); err != nil {
-			log.Printf("Error sending message: %v", err)
+			logger.Printf("ERROR: Failed to send message (Iteration %d): %v", i, err)
 		}
 
-		log.Printf("Finished collecting stats with iterator: %d, waiting %dsec", i, t)
+		logger.Printf("INFO: Cycle completed (Iteration %d, Sleep: %ds)", i, t)
 		time.Sleep(time.Duration(t) * time.Second)
 	}
+}
 
+// Helper function to format metric for logging
+func formatMetricForLog(m *pb.Metric) string {
+	var builder strings.Builder
+
+	// Basic info
+	builder.WriteString(fmt.Sprintf("Host: %s | Timestamp: %s\n",
+		m.Hostname, m.Timestamp))
+
+	// CPU
+	builder.WriteString(fmt.Sprintf("CPU: %.2f%%\n", m.CpuUsagePercent))
+
+	// Memory
+	builder.WriteString(fmt.Sprintf(
+		"Memory: %.2f%% used (%dGB/%dGB free)\n",
+		m.MemoryUsedPercent,
+		m.MemoryUsedGb,
+		m.MemoryTotalGb,
+	))
+
+	// Disk
+	if len(m.DiskStats) > 0 {
+		builder.WriteString("Disks:\n")
+		for _, disk := range m.DiskStats {
+			builder.WriteString(fmt.Sprintf(
+				"  %s: %.2f%% used (%dGB/%dGB free)\n",
+				disk.GetMountpoint(),
+				disk.GetUsedPercent(),
+				disk.GetUsedGb(),
+				disk.GetTotalGb(),
+			))
+		}
+	}
+
+	// Network
+	if len(m.NetStats) > 0 {
+		builder.WriteString("Network:\n")
+		for _, net := range m.NetStats {
+			builder.WriteString(fmt.Sprintf(
+				"  %s: Tx %dMB, Rx %dMB\n",
+				net.GetInterfaceName(),
+				net.GetBytesReceived(),
+				net.GetBytesSent(),
+			))
+		}
+	}
+
+	return builder.String()
 }
