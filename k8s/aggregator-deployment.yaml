@@ -39,5 +39,15 @@ spec:
           value: "45000"
         - name: VICTORIA_METRICS_URL
           value: http://victoria-metrics.monitoring.svc.cluster.local:8428/api/v1/import
+        volumeMounts:
+        - name: agg-logs
+          mountPath: /var/log
+      initContainers:
+      - name: init-log-dir
+        image: busybox
+        command: ["sh", "-c", "mkdir -p /var/log && chmod 777 /var/log"]
+        volumeMounts:
+         - name: agg-logs
+           mountPath: /var/log    
       imagePullSecrets:
       - name: regcred
