@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -19,7 +20,27 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// StartAggregator function consumes messages from Kafka and processes them
+func initLogger() *log.Logger {
+	// First create stdout logger for debugging
+	bootstrapLog := log.New(os.Stdout, "[INIT] ", log.LstdFlags|log.Lshortfile)
+	bootstrapLog.Println("Logger initialization started")
+
+	logDir := "/var/log"
+	logFile := filepath.Join(logDir, "aggregator.log")
+
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		bootstrapLog.Fatalf("Failed to open log file: %v", err)
+	}
+
+	if _, err := os.Stat(logFile); err != nil {
+		bootstrapLog.Fatalf("Log file verification failed: %v", err)
+	}
+	bootstrapLog.Printf("Successfully initialized file logging to %s", logFile)
+
+	return log.New(file, "", log.LstdFlags|log.Lshortfile)
+}
+
 func StartAggregator() error {
 
 	// Read Kafka env variable
@@ -230,8 +251,18 @@ func sendToVictoriaMetrics(data map[string]interface{}) error {
 }
 
 func main() {
+
+	logger := initLogger()
+	defer func() {
+		if f, ok := logger.Writer().(*os.File); ok {
+			f.Close()
+		}
+	}()
+
+	logger.Println("AGGREGATOR MAIN STARTED")
+
 	err := StartAggregator()
 	if err != nil {
-		log.Fatal("Failed to start aggregator:", err)
+		logger.Fatal("Failed to start aggregator:", err)
 	}
 }
