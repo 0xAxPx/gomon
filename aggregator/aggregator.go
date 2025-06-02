@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gomon/pb" // Import your generated protobuf package
+	"gomon/pb"
 	"io"
 	"log"
 	"net/http"
@@ -21,7 +21,6 @@ import (
 )
 
 func initLogger() *log.Logger {
-	// First create stdout logger for debugging
 	bootstrapLog := log.New(os.Stdout, "[INIT] ", log.LstdFlags|log.Lshortfile)
 	bootstrapLog.Println("Logger initialization started")
 
@@ -41,18 +40,18 @@ func initLogger() *log.Logger {
 	return log.New(file, "", log.LstdFlags|log.Lshortfile)
 }
 
-func StartAggregator() error {
+func StartAggregator(logger *log.Logger) error {
 
 	// Read Kafka env variable
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
-		log.Fatal("KAFKA_BROKERS environment variable is not set")
+		logger.Fatal("KAFKA_BROKERS environment variable is not set")
 	}
 
 	// Read Kafka topic from environment variable
 	kafkaTopic := os.Getenv("KAFKA_TOPIC")
 	if kafkaTopic == "" {
-		log.Fatal("KAFKA_TOPIC environment variable is not set")
+		logger.Fatal("KAFKA_TOPIC environment variable is not set")
 	}
 
 	log.Printf("Creating Kafka producer with brokers %v and topic %s", kafkaBrokers, kafkaTopic)
@@ -69,18 +68,18 @@ func StartAggregator() error {
 	for {
 		select {
 		case <-sigs:
-			log.Println("Received termination signal, stopping aggregator...")
+			logger.Println("Received termination signal, stopping aggregator...")
 			return nil
 		default:
 			msg, err := reader.ReadMessage(context.Background())
 			if err != nil {
-				log.Printf("Could not read message: %v", err)
+				logger.Printf("Could not read message: %v", err)
 				continue
 			}
 
-			err = processAndSendMetrics(msg.Value)
+			err = processAndSendMetrics(msg.Value, logger)
 			if err != nil {
-				log.Printf("Error processing message: %v", err)
+				logger.Printf("Error processing message: %v", err)
 			}
 		}
 	}
@@ -109,32 +108,32 @@ func sendNetStats(metric *pb.Metric) error {
 }
 
 // processAndSendMetrics processes and sends separate metrics to VictoriaMetrics
-func processAndSendMetrics(protoData []byte) error {
+func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
 	var metric pb.Metric
 	err := proto.Unmarshal(protoData, &metric)
 	if err != nil {
 		return fmt.Errorf("could not unmarshal protobuf data: %v", err)
 	}
 
-	err = sendMetricToVictoria("cpu_usage_percent", metric.CpuUsagePercent, metric.Timestamp)
+	err = sendMetricToVictoria("cpu_usage_percent", metric.CpuUsagePercent, metric.Timestamp, logger)
 	if err != nil {
 		return fmt.Errorf("error sending CPU metric: %v", err)
 	} else {
-		log.Println("Successfully sent CPU metrics to VictoriaMetrics")
+		logger.Println("Successfully sent CPU metrics to VictoriaMetrics")
 	}
 
 	err = sendMetricToVictoria("mem_usage_percent", metric.MemoryUsedPercent, metric.Timestamp)
 	if err != nil {
 		return fmt.Errorf("error sending MemUsage metric: %v", err)
 	} else {
-		log.Println("Successfully sent Mem metrics to VictoriaMetrics")
+		logger.Println("Successfully sent Mem metrics to VictoriaMetrics")
 	}
 
 	err = sendMetricToVictoria("dsk_used_gb", float32(metric.MemoryUsedGb), metric.Timestamp)
 	if err != nil {
 		return fmt.Errorf("error sending Disk Used GB metric: %v", err)
 	} else {
-		log.Println("Successfully sent Disk Used (GB) metrics to VictoriaMetrics")
+		logger.Println("Successfully sent Disk Used (GB) metrics to VictoriaMetrics")
 	}
 
 	// Iterating Disk stats
@@ -144,7 +143,7 @@ func processAndSendMetrics(protoData []byte) error {
 			if err != nil {
 				return fmt.Errorf("error sending Disk Used Percent metric: %v", err)
 			} else {
-				log.Println("Successfully sent Disk Used(%) metrics to VictoriaMetrics")
+				logger.Println("Successfully sent Disk Used(%) metrics to VictoriaMetrics")
 			}
 		}
 	}
@@ -173,12 +172,12 @@ func processAndSendMetrics(protoData []byte) error {
 	// 	}
 	// }
 
-	log.Println("Successfully processed and sent metrics to VictoriaMetrics")
+	logger.Println("Successfully processed and sent metrics to VictoriaMetrics")
 	return nil
 }
 
 // sendMetricToVictoria sends individual metrics to VictoriaMetrics
-func sendMetricToVictoria(metricName string, value float32, timestampStr string) error {
+func sendMetricToVictoria(metricName string, value float32, timestampStr string, logger *log.Logger) error {
 	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid timestamp format: %v", err)
@@ -193,28 +192,28 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string)
 	// Prepare the payload for VictoriaMetrics
 	data := map[string]interface{}{
 		"metric": map[string]string{
-			"__name__": metricName,           // Metric name
-			"job":      "metrics-aggregator", // Job label
-			"instance": hostname + "-agg",    // Instance label
+			"__name__": metricName,
+			"job":      "metrics-aggregator",
+			"instance": hostname + "-agg",
 		},
-		"values":     []float64{float64(value)}, // Convert to float64 as required by VictoriaMetrics
-		"timestamps": []int64{timestamp * 1000}, // Convert to milliseconds
+		"values":     []float64{float64(value)},
+		"timestamps": []int64{timestamp * 1000},
 	}
 
 	// Log the JSON for debugging
 	jsonData, _ := json.MarshalIndent(data, "", "  ")
-	log.Printf("Sending JSON to VictoriaMetrics: %s\n", string(jsonData))
+	logger.Printf("Sending JSON to VictoriaMetrics: %s\n", string(jsonData))
 
 	// Send data to VictoriaMetrics
-	return sendToVictoriaMetrics(data)
+	return sendToVictoriaMetrics(data, logger)
 }
 
 // sendToVictoriaMetrics sends data to VictoriaMetrics
-func sendToVictoriaMetrics(data map[string]interface{}) error {
+func sendToVictoriaMetrics(data map[string]interface{}, logger *log.Logger) error {
 
 	victoriaMetrics := os.Getenv("VICTORIA_METRICS_URL")
 	if victoriaMetrics == "" {
-		log.Fatal("VICTORIA_METRICS_URL environment variable is not set")
+		logger.Fatal("VICTORIA_METRICS_URL environment variable is not set")
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -237,12 +236,12 @@ func sendToVictoriaMetrics(data map[string]interface{}) error {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	log.Printf("Request Body: %s", string(jsonData))
-	log.Printf("Response Status: %d", resp.StatusCode)
-	log.Printf("Response Body: %s", string(body))
+	logger.Printf("Request Body: %s", string(jsonData))
+	logger.Printf("Response Status: %d", resp.StatusCode)
+	logger.Printf("Response Body: %s", string(body))
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		log.Printf("Successfully sent metrics to VictoriaMetrics. Status: %s", resp.Status)
+		logger.Printf("Successfully sent metrics to VictoriaMetrics. Status: %s", resp.Status)
 	} else {
 		return fmt.Errorf("unexpected response from VictoriaMetrics: %s", resp.Status)
 	}
@@ -261,7 +260,7 @@ func main() {
 
 	logger.Println("AGGREGATOR MAIN STARTED")
 
-	err := StartAggregator()
+	err := StartAggregator(logger)
 	if err != nil {
 		logger.Fatal("Failed to start aggregator:", err)
 	}
