@@ -4,7 +4,7 @@ metadata:
   name: aggregator
   namespace: monitoring
 spec:
-  replicas: 1 # Adjust as needed
+  replicas: 1
   selector:
     matchLabels:
       app: aggregator
@@ -49,5 +49,8 @@ spec:
         volumeMounts:
          - name: agg-logs
            mountPath: /var/log    
+      volumes:
+      - name: agg-logs
+        emptyDir: {}
       imagePullSecrets:
       - name: regcred
