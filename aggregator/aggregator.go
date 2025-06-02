@@ -85,18 +85,18 @@ func StartAggregator(logger *log.Logger) error {
 	}
 }
 
-func sendNetStats(metric *pb.Metric) error {
+func sendNetStats(metric *pb.Metric, logger *log.Logger) error {
 	for _, net := range metric.NetStats {
 		if net != nil {
 
-			err := sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp)
+			err := sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp, logger)
 			if err != nil {
 				return fmt.Errorf("error sending Cumulative Inet Bytes Recv (MB) metric: %v", err)
 			} else {
 				log.Println("Successfully sent Inet Bytes Recv (MB) metrics to VictoriaMetrics")
 			}
 
-			err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp)
+			err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp, logger)
 			if err != nil {
 				return fmt.Errorf("error sending Cumulative Inet Bytes Sent (MB) metric: %v", err)
 			} else {
@@ -122,14 +122,14 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
 		logger.Println("Successfully sent CPU metrics to VictoriaMetrics")
 	}
 
-	err = sendMetricToVictoria("mem_usage_percent", metric.MemoryUsedPercent, metric.Timestamp)
+	err = sendMetricToVictoria("mem_usage_percent", metric.MemoryUsedPercent, metric.Timestamp, logger)
 	if err != nil {
 		return fmt.Errorf("error sending MemUsage metric: %v", err)
 	} else {
 		logger.Println("Successfully sent Mem metrics to VictoriaMetrics")
 	}
 
-	err = sendMetricToVictoria("dsk_used_gb", float32(metric.MemoryUsedGb), metric.Timestamp)
+	err = sendMetricToVictoria("dsk_used_gb", float32(metric.MemoryUsedGb), metric.Timestamp, logger)
 	if err != nil {
 		return fmt.Errorf("error sending Disk Used GB metric: %v", err)
 	} else {
@@ -139,7 +139,7 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
 	// Iterating Disk stats
 	for _, disk := range metric.DiskStats {
 		if disk != nil {
-			err = sendMetricToVictoria("disk_used_percent", float32(disk.UsedPercent), metric.Timestamp)
+			err = sendMetricToVictoria("disk_used_percent", float32(disk.UsedPercent), metric.Timestamp, logger)
 			if err != nil {
 				return fmt.Errorf("error sending Disk Used Percent metric: %v", err)
 			} else {
@@ -149,7 +149,7 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
 	}
 
 	// Iterating Net stats
-	if err := sendNetStats(&metric); err != nil {
+	if err := sendNetStats(&metric, logger); err != nil {
 		return fmt.Errorf("error sending Net Stats: %v", err)
 	}
 
