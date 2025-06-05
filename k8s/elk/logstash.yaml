@@ -19,9 +19,16 @@ spec:
         command: ["logstash", "-e", ""]  # Empty pipeline
         ports:
         - containerPort: 5044
+        volumeMounts:
+        - name: logstash-pipeline
+          mountPath: /usr/share/logstash/pipeline
         resources:
           limits:
             memory: "712Mi"
+      volumes:
+        - name: logstash-pipeline
+          configMap:
+            name: logstash-pipeline
 
 ---
 apiVersion: v1
