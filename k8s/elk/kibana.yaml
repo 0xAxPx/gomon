@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:8.7.0
+        env:
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        - name: SERVER_BASEPATH
+          value: /kibana
+        - name: SERVER_PUBLICBASEURL
+          value: "http://kibana.local/kibana"
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://elasticsearch:9200"
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size=512"
+        ports:
+        - containerPort: 5601
+        resources:
+          limits:
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "812Mi"
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 30  # Increased for slow starts
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: monitoring
+spec:
+  selector:
+    app: kibana
+  ports:
+  - port: 5601
+    targetPort: 5601
