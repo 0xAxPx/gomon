@@ -25,13 +25,13 @@ spec:
         - name: xpack.security.enabled
           value: "false"
         - name: ES_JAVA_OPTS
-          value: "-Xms512m -Xmx800m"
+          value: "-Xms1g -Xmx1g"
         resources:
           requests:
             cpu: "500m"
             memory: "1Gi"
           limits:
-            memory: "1Gi"
+            memory: "2Gi"
         ports:
         - containerPort: 9200
         volumeMounts:
@@ -43,15 +43,20 @@ spec:
             port: 9200
           initialDelaySeconds: 30
           periodSeconds: 10
-      volumes:
-      - name: data
-        persistentVolumeClaim:
-          claimName: elasticsearch-pvc
       tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
 
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: "elasticsearch-pvc"
 ---
 apiVersion: v1
 kind: Service

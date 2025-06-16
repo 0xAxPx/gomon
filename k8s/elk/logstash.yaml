@@ -16,12 +16,12 @@ spec:
       containers:
       - name: logstash
         image: docker.elastic.co/logstash/logstash:8.7.0
-        command: ["logstash", "-e", ""]  # Empty pipeline
         ports:
         - containerPort: 5044
         volumeMounts:
         - name: logstash-pipeline
-          mountPath: /usr/share/logstash/pipeline
+          mountPath: /usr/share/logstash/pipeline/logstash.conf
+          subPath: logstash.conf
         resources:
           limits:
             memory: "712Mi"
@@ -29,7 +29,6 @@ spec:
         - name: logstash-pipeline
           configMap:
             name: logstash-pipeline
-
 ---
 apiVersion: v1
 kind: Service
