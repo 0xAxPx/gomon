@@ -13,7 +13,7 @@ data:
 
     output {
       elasticsearch {
-        hosts => ["http://elasticsearch:9200"]
+        hosts => ["http://192.168.0.45:9200"]
         index => "logs-%{+YYYY.MM.dd}"
       }
     }

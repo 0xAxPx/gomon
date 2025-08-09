@@ -19,28 +19,44 @@ spec:
         env:
         - name: SERVER_HOST
           value: "0.0.0.0"
-        - name: SERVER_BASEPATH
-          value: /kibana
-        - name: SERVER_PUBLICBASEURL
-          value: "http://kibana.local/kibana"
+        - name: SERVER_PORT
+          value: "5601"
         - name: ELASTICSEARCH_HOSTS
-          value: "http://elasticsearch:9200"
+          value: "http://192.168.0.45:9200"
+        - name: XPACK_SECURITY_ENABLED
+          value: "false"
+        - name: XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY
+          value: "something_at_least_32_characters_long_for_encryption"
+        - name: XPACK_MONITORING_ENABLED
+          value: "false"
         - name: NODE_OPTIONS
-          value: "--max-old-space-size=512"
+          value: "--max-old-space-size=1536"
         ports:
         - containerPort: 5601
+          name: http
         resources:
-          limits:
-            memory: "1Gi"
           requests:
-            cpu: "500m"
-            memory: "812Mi"
+            cpu: "300m"
+            memory: "768Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1.5Gi"
         readinessProbe:
           httpGet:
             path: /api/status
             port: 5601
-          initialDelaySeconds: 30  # Increased for slow starts
-          periodSeconds: 10
+          initialDelaySeconds: 90
+          periodSeconds: 15
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 120
+          periodSeconds: 30
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
 ---
 apiVersion: v1
 kind: Service
