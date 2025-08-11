@@ -49,7 +49,6 @@ spec:
           value: "45000"
         - name: VICTORIA_METRICS_URL
           value: "http://victoria.local/api/v1/import"
-        # ADDED: Log file path for application logging
         - name: LOG_FILE
           value: "/var/log/aggregator.log"
         volumeMounts:
@@ -69,7 +68,6 @@ spec:
           runAsGroup: 1000
           runAsNonRoot: true
           
-      # ADDED: Filebeat sidecar container for log collection
       - name: filebeat
         image: docker.elastic.co/beats/filebeat:8.11.0
         imagePullPolicy: IfNotPresent
@@ -86,6 +84,8 @@ spec:
           mountPath: /usr/share/filebeat/filebeat.yml
           subPath: filebeat.yml
           readOnly: true
+        - name: filebeat-data
+          mountPath: /usr/share/filebeat/data
         resources:
           requests:
             cpu: "100m"
@@ -104,5 +104,7 @@ spec:
       - name: filebeat-config
         configMap:
           name: filebeat-aggregator-config
+      - name: filebeat-data
+        emptyDir: {}
       imagePullSecrets:
       - name: regcred
