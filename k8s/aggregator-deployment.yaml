@@ -13,7 +13,17 @@ spec:
       labels:
         app: aggregator
     spec:
+      initContainers:
+      - name: init-log-dir
+        image: busybox
+        command: ["sh", "-c", "mkdir -p /var/log && chmod 777 /var/log"]
+        volumeMounts:
+         - name: agg-logs
+           mountPath: /var/log
+        securityContext:
+          runAsUser: 0  # Required for directory creation
       containers:
+      # Main aggregator container (your existing setup with fixes)
       - name: aggregator
         image: ragazzo271985/aggregator:20250602-e018749
         imagePullPolicy: Always
@@ -38,19 +48,61 @@ spec:
         - name: KAFKA_SESSION_TIMEOUT_MS
           value: "45000"
         - name: VICTORIA_METRICS_URL
-          value: http://victoria-metrics.monitoring.svc.cluster.local:8428/api/v1/import
+          value: "http://victoria.local/api/v1/import"
+        # ADDED: Log file path for application logging
+        - name: LOG_FILE
+          value: "/var/log/aggregator.log"
         volumeMounts:
         - name: agg-logs
           mountPath: /var/log
-      initContainers:
-      - name: init-log-dir
-        image: busybox
-        command: ["sh", "-c", "mkdir -p /var/log && chmod 777 /var/log"]
+        livenessProbe:
+          exec:
+            command:
+            - pgrep
+            - -f
+            - aggregator
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 3
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          
+      # Filebeat sidecar container for log collection
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:8.11.0
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         volumeMounts:
-         - name: agg-logs
-           mountPath: /var/log    
+        - name: agg-logs
+          mountPath: /var/log
+          readOnly: true
+        - name: filebeat-config
+          mountPath: /usr/share/filebeat/filebeat.yml
+          subPath: filebeat.yml
+          readOnly: true
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          
       volumes:
       - name: agg-logs
         emptyDir: {}
+      # Filebeat configuration volume
+      - name: filebeat-config
+        configMap:
+          name: filebeat-aggregator-config
       imagePullSecrets:
       - name: regcred
