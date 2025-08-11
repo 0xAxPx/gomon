@@ -10,10 +10,108 @@ data:
         port => 5044
       }
     }
+    
+    filter {
+      # Parse aggregator application logs
+      if [app] == "aggregator" {
+        
+        # Parse timestamp and message
+        grok {
+          match => { 
+            "message" => "%{TIMESTAMP_ISO8601:log_timestamp} %{DATA:source_file}:%{INT:line_number}: %{GREEDYDATA:log_message}" 
+          }
+          add_tag => [ "aggregator-parsed" ]
+        }
+        
+        # Parse different log types
+        if "Request Body:" in [log_message] {
+          grok {
+            match => { 
+              "log_message" => "Request Body: %{GREEDYDATA:request_body}" 
+            }
+          }
+          mutate {
+            add_tag => [ "aggregator-request" ]
+          }
+          # Try to parse JSON request body
+          if [request_body] {
+            json {
+              source => "request_body"
+              target => "request_data"
+            }
+          }
+        }
+        
+        if "Response Status:" in [log_message] {
+          grok {
+            match => { 
+              "log_message" => "Response Status: %{INT:response_status}" 
+            }
+          }
+          mutate {
+            add_tag => [ "aggregator-response" ]
+            convert => { "response_status" => "integer" }
+          }
+        }
+        
+        if "Successfully sent metrics" in [log_message] {
+          mutate {
+            add_tag => [ "aggregator-success", "metrics-sent" ]
+          }
+        }
+        
+        if "Successfully processed and sent metrics" in [log_message] {
+          mutate {
+            add_tag => [ "aggregator-processed", "metrics-completed" ]
+          }
+        }
+        
+        # Parse the timestamp
+        date {
+          match => [ "log_timestamp", "yyyy/MM/dd HH:mm:ss" ]
+          target => "@timestamp"
+        }
+        
+        # Add structured fields for better searching
+        mutate {
+          add_field => { 
+            "application" => "aggregator"
+            "component" => "metrics-aggregator"
+            "log_level" => "INFO"
+          }
+        }
+      }
+      
+      # General Kubernetes metadata enrichment
+      if [kubernetes] {
+        mutate {
+          add_field => { 
+            "k8s_namespace" => "%{[kubernetes][namespace]}"
+            "k8s_pod" => "%{[kubernetes][pod][name]}"
+            "k8s_container" => "%{[kubernetes][container][name]}"
+          }
+        }
+      }
+    }
 
     output {
       elasticsearch {
         hosts => ["http://192.168.0.45:9200"]
-        index => "logs-%{+YYYY.MM.dd}"
+        index => "aggregator-logs-%{+YYYY.MM.dd}"
+        # Use different index for different log types
+        if "aggregator-request" in [tags] {
+          index => "aggregator-requests-%{+YYYY.MM.dd}"
+        } else if "aggregator-response" in [tags] {
+          index => "aggregator-responses-%{+YYYY.MM.dd}"
+        } else if "aggregator-success" in [tags] {
+          index => "aggregator-success-%{+YYYY.MM.dd}"
+        }
+      }
+      
+      # Debug output (remove in production)
+      stdout {
+        codec => rubydebug {
+          metadata => false
+        }
       }
     }
