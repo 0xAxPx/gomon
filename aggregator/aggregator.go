@@ -201,7 +201,7 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string,
 	}
 
 	// Log the JSON for debugging
-	jsonData, _ := json.MarshalIndent(data, "", "  ")
+	jsonData, _ := json.Marshal(data)
 	logger.Printf("Sending JSON to VictoriaMetrics: %s\n", string(jsonData))
 
 	// Send data to VictoriaMetrics
