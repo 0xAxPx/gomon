@@ -25,7 +25,7 @@ spec:
       containers:
       # Main aggregator container (your existing setup with fixes)
       - name: aggregator
-        image: ragazzo271985/aggregator:20250602-e018749
+        image: ragazzo271985/aggregator:20250812-87e3e2a
         imagePullPolicy: Always
         resources:
           requests:
