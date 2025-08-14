@@ -11,6 +11,77 @@ data:
       }
     }
     
+    filter {
+      # Parse the message field to extract JSON data
+      if [message] =~ /Sending JSON to VictoriaMetrics:/ {
+        # Extract the JSON part from the message
+        grok {
+          match => { 
+            "message" => "%{TIMESTAMP_ISO8601:log_timestamp} %{DATA:source_file}: Sending JSON to VictoriaMetrics: %{GREEDYDATA:json_payload}" 
+          }
+        }
+        
+        # Parse the extracted JSON
+        if [json_payload] {
+          json {
+            source => "json_payload"
+            target => "victoria_metrics_data"
+          }
+          
+          # Extract metric name from nested structure
+          if [victoria_metrics_data][metric][__name__] {
+            mutate {
+              add_field => { 
+                "metric_name" => "%{[victoria_metrics_data][metric][__name__]}" 
+                "metric_instance" => "%{[victoria_metrics_data][metric][instance]}"
+                "metric_job" => "%{[victoria_metrics_data][metric][job]}"
+              }
+            }
+          }
+          
+          # Extract metric values (first value from array)
+          if [victoria_metrics_data][values] and [victoria_metrics_data][values][0] {
+            mutate {
+              add_field => { "metric_value" => "%{[victoria_metrics_data][values][0]}" }
+              convert => { "metric_value" => "float" }
+            }
+          }
+          
+          # Extract timestamp (first timestamp from array)
+          if [victoria_metrics_data][timestamps] and [victoria_metrics_data][timestamps][0] {
+            mutate {
+              add_field => { "metric_timestamp" => "%{[victoria_metrics_data][timestamps][0]}" }
+              convert => { "metric_timestamp" => "integer" }
+            }
+          }
+          
+          # Add tags for easier filtering
+          mutate {
+            add_tag => [ "victoria_metrics_json", "parsed_metrics" ]
+          }
+          
+          # Clean up temporary fields
+          mutate {
+            remove_field => [ "json_payload" ]
+          }
+        }
+      }
+      
+      # Parse other successful processing messages
+      if [message] =~ /Successfully processed and sent metrics to VictoriaMetrics/ {
+        mutate {
+          add_tag => [ "metrics_success" ]
+        }
+      }
+      
+      # Parse error messages
+      if [message] =~ /Error processing message/ {
+        mutate {
+          add_tag => [ "metrics_error" ]
+        }
+      }
+    }
+    
     output {
       elasticsearch {
         hosts => ["http://192.168.0.45:9200"]
