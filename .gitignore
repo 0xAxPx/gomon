@@ -1,3 +1,8 @@
 # Ignore victoria-metrics data
 victoria-metrics-data/
 .terraform/
+# SonarQube temporary files
+.scannerwork/
+.sonar_lock
+report-task.txt
+sonar-project.properties.bak
