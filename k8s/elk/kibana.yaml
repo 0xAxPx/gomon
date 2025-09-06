@@ -22,7 +22,7 @@ spec:
         - name: SERVER_PORT
           value: "5601"
         - name: ELASTICSEARCH_HOSTS
-          value: "http://192.168.0.45:9200,http://192.168.0.157:9200"
+          value: '["http://192.168.0.45:9200,http://192.168.0.157:9200"]'
         - name: XPACK_SECURITY_ENABLED
           value: "false"
         - name: XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY
