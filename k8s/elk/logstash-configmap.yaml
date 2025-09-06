@@ -63,13 +63,8 @@ data:
         # ✅ CORRECTED: Use load balancer endpoint
         hosts => ["http://elasticsearch-lb:9200"]
         index => "aggregator-logs"
-        
-        timeout => 60                    # Instead of 'request_timeout'
-        retries => 3                     # Instead of 'retry_on_failure'
-        retry_max_interval => 64         # This is valid
-        retry_initial_interval => 2      # This is valid
-        
-        # Connection pool settings
+
+        timeout => 60
         pool_max => 20
         pool_max_per_route => 10
         
