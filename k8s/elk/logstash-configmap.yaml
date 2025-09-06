@@ -60,16 +60,18 @@ data:
     
     output {
       elasticsearch {
-        # ✅ USE LOAD BALANCER instead of direct ES hosts
+        # ✅ CORRECTED: Use load balancer endpoint
         hosts => ["http://elasticsearch-lb:9200"]
         index => "aggregator-logs"
         
-        # Simplified settings since LB handles failover
-        retry_on_conflict => 3
-        retry_initial_interval => 2
-        retry_max_interval => 64
-        retry_on_failure => 3
-        request_timeout => 60
+        timeout => 60                    # Instead of 'request_timeout'
+        retries => 3                     # Instead of 'retry_on_failure'
+        retry_max_interval => 64         # This is valid
+        retry_initial_interval => 2      # This is valid
+        
+        # Connection pool settings
+        pool_max => 20
+        pool_max_per_route => 10
         
         # Template management
         manage_template => false

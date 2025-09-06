@@ -15,42 +15,95 @@ spec:
       labels:
         app: elasticsearch-lb
     spec:
+      # 🔥 HOST NETWORK: Direct access to external VMs
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      
       containers:
       - name: nginx
         image: nginx:1.25-alpine
+        
+        # ✅ FIXED: When hostNetwork=true, containerPort IS the host port
         ports:
         - containerPort: 9200
           name: elasticsearch
+          protocol: TCP
         - containerPort: 8080
           name: health
+          protocol: TCP
+        
         volumeMounts:
         - name: nginx-config
           mountPath: /etc/nginx/nginx.conf
           subPath: nginx.conf
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+        
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
             cpu: 100m
             memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 256Mi
+        
+        # Health checks
         readinessProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 5
+            host: localhost
+          initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
         livenessProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 10
+            host: localhost
+          initialDelaySeconds: 30
           periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+      
+      # Init container to verify external connectivity
+      initContainers:
+      - name: connectivity-test
+        image: curlimages/curl:8.4.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "🔍 Testing external ES connectivity from HOST NETWORK..."
+          echo "Testing Node 1 (192.168.0.45:9200):"
+          if curl -m 15 -f http://192.168.0.45:9200; then
+            echo "✅ Node 1 reachable"
+          else
+            echo "❌ Node 1 FAILED - Exit code: $?"
+            exit 1
+          fi
+          
+          echo "Testing Node 2 (192.168.0.157:9200):"
+          if curl -m 15 -f http://192.168.0.157:9200; then
+            echo "✅ Node 2 reachable"
+          else
+            echo "❌ Node 2 FAILED - Exit code: $?"
+            exit 1
+          fi
+          
+          echo "🎉 All ES nodes accessible from host network!"
+      
       volumes:
       - name: nginx-config
         configMap:
           name: elasticsearch-lb-config
+      - name: nginx-logs
+        emptyDir: {}
+
 ---
+# Service for internal cluster access
 apiVersion: v1
 kind: Service
 metadata:
@@ -62,10 +115,11 @@ spec:
   selector:
     app: elasticsearch-lb
   ports:
+  # ✅ CORRECTED: Direct mapping to container ports (which are host ports)
   - port: 9200
-    targetPort: 9200
+    targetPort: 9200         # Direct mapping
     name: elasticsearch
   - port: 8080
-    targetPort: 8080
+    targetPort: 8080         # Direct mapping
     name: health
   type: ClusterIP
