@@ -62,7 +62,7 @@ data:
       elasticsearch {
         # ✅ CORRECTED: Use load balancer endpoint
         hosts => ["http://elasticsearch-lb:9200"]
-        index => "aggregator-logs"
+        index => "aggregator-logs-write"
 
         timeout => 60
         pool_max => 20
