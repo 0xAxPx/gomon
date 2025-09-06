@@ -1,3 +1,4 @@
+# Updated logstash-configmap.yaml for ES Cluster
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -12,14 +13,12 @@ data:
     }
     
     filter {
-      # Simple test - just add debug fields to see if filter is working
       if [message] =~ /Sending JSON to VictoriaMetrics:/ {
         mutate {
           add_field => { "contains_json" => "true" }
           add_tag => [ "has_victoria_metrics_json" ]
         }
         
-        # Try to extract JSON using ruby code (more reliable)
         ruby {
           code => '
             msg = event.get("message")
@@ -30,14 +29,12 @@ data:
           '
         }
         
-        # Parse the extracted JSON
         if [json_payload] {
           json {
             source => "json_payload"
             target => "victoria_data"
           }
           
-          # Extract simple fields for testing
           if [victoria_data][metric][__name__] {
             mutate {
               add_field => { 
@@ -55,7 +52,6 @@ data:
         }
       }
       
-      # Tag other message types
       if [message] =~ /Successfully processed and sent metrics/ {
         mutate {
           add_tag => [ "metrics_success" ]
@@ -65,8 +61,31 @@ data:
     
     output {
       elasticsearch {
-        hosts => ["http://192.168.0.45:9200"]
+        # CLUSTER CONFIGURATION - Both ES nodes
+        hosts => ["http://192.168.0.45:9200", "http://192.168.0.157:9200"]
         index => "aggregator-logs"
+        
+        # CONNECTION POOL SETTINGS
+        pool_max => 20                     # Total max connections across ALL ES nodes
+        pool_max_per_route => 10           # Max connections per individual ES node
+        
+        # CLUSTER DISCOVERY
+        sniffing => true                   # Auto-discover cluster nodes
+        sniffing_delay => 5                # Check for new nodes every 5 seconds
+        
+        # RELIABILITY SETTINGS
+        retry_on_conflict => 3             # Retry on version conflicts
+        retry_initial_interval => 2        # Start retry after 2 seconds
+        retry_max_interval => 64           # Max retry interval 64 seconds
+        retry_on_failure => 3              # Retry failed requests 3 times
+        request_timeout => 60              # 60 second request timeout
+        
+        # HEALTH CHECKING
+        validate_after_inactivity => 10000 # Validate connections after 10s idle
+        resurrection_delay => 5            # Check dead nodes every 5 seconds
+        
+        # TEMPLATE MANAGEMENT
+        manage_template => false           # Don't auto-create templates
       }
       
       stdout {
