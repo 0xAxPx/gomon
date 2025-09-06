@@ -129,7 +129,7 @@ func collectNet(wg *sync.WaitGroup, metric *pb.Metric) {
 	}
 
 	// Wait for the interval duration (e.g., 10 seconds)
-	time.Sleep(1 * time.Second)
+	time.Sleep(20 * time.Second)
 
 	// Get network stats after the interval
 	currCounters, err := net.IOCounters(false)
@@ -203,7 +203,7 @@ func main() {
 	defer producer.Close()
 
 	i := 0
-	t := 10
+	t := 20
 	for {
 		metric := &pb.Metric{
 			Timestamp: strconv.FormatInt(time.Now().Unix(), 10),
