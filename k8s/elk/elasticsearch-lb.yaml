@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch-lb
+  namespace: monitoring
+  labels:
+    app: elasticsearch-lb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch-lb
+  template:
+    metadata:
+      labels:
+        app: elasticsearch-lb
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 9200
+          name: elasticsearch
+        - containerPort: 8080
+          name: health
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: elasticsearch-lb-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-lb
+  namespace: monitoring
+  labels:
+    app: elasticsearch-lb
+spec:
+  selector:
+    app: elasticsearch-lb
+  ports:
+  - port: 9200
+    targetPort: 9200
+    name: elasticsearch
+  - port: 8080
+    targetPort: 8080
+    name: health
+  type: ClusterIP
