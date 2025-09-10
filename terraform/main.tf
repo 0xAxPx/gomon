@@ -144,3 +144,150 @@ resource "kubernetes_service" "victoria_metrics" {
     }
   }
 }
+
+resource "kubernetes_config_map" "postgres_config" {
+  metadata {
+    name      = "postgres-config"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app        = "postgres"
+      managed-by = "terraform"
+    }
+  }
+
+  data = {
+    POSTGRES_DB       = "sonarqube"
+    POSTGRES_USER     = "sonarqube"
+    POSTGRES_PASSWORD = "sonarqube123"
+  }
+}
+
+resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
+  metadata {
+    name      = "postgres-pvc"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app        = "postgres"
+      managed-by = "terraform"
+    }
+  }
+  
+  spec {
+    access_modes = ["ReadWriteOnce"]
+    resources {
+      requests = {
+        storage = "5Gi"
+      }
+    }
+  }
+}
+
+resource "kubernetes_deployment" "postgres" {
+  metadata {
+    name      = "postgres"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app        = "postgres"
+      managed-by = "terraform"
+    }
+  }
+
+  spec {
+    replicas = 1
+    selector {
+      match_labels = {
+        app = "postgres"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "postgres"
+        }
+      }
+
+      spec {
+        container {
+          name  = "postgres"
+          image = "postgres:15"
+          
+          port {
+            container_port = 5432
+          }
+          
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.postgres_config.metadata[0].name
+            }
+          }
+          
+          volume_mount {
+            name       = "postgres-storage"
+            mount_path = "/var/lib/postgresql/data"
+          }
+          
+          resources {
+            requests = {
+              cpu    = "200m"
+              memory = "512Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "1Gi"
+            }
+          }
+
+          readiness_probe {
+            exec {
+              command = ["pg_isready", "-U", "sonarqube"]
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 10
+          }
+
+          liveness_probe {
+            exec {
+              command = ["pg_isready", "-U", "sonarqube"]
+            }
+            initial_delay_seconds = 60
+            period_seconds        = 30
+          }
+        }
+        
+        volume {
+          name = "postgres-storage"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.postgres_pvc.metadata[0].name
+          }
+        }
+      }
+    }
+  }
+}
+
+# PostgreSQL Service
+resource "kubernetes_service" "postgres" {
+  metadata {
+    name      = "postgres"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app        = "postgres"
+      managed-by = "terraform"
+    }
+  }
+
+  spec {
+    type = "ClusterIP"
+    
+    port {
+      port        = 5432
+      target_port = 5432
+      protocol    = "TCP"
+    }
+    
+    selector = {
+      app = "postgres"
+    }
+  }
+}
