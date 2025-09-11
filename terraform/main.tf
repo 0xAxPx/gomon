@@ -291,3 +291,101 @@ resource "kubernetes_service" "postgres" {
     }
   }
 }
+
+# Create Ingress Resourse
+resource "kubernetes_ingress_v1" "monitoring_ingress" {
+  metadata {
+    name      = "monitoring-ingress"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app        = "monitoring-ingress"
+      managed-by = "terraform"
+    }
+    annotations = {
+      "nginx.ingress.kubernetes.io/rewrite-target"      = "/"
+      "nginx.ingress.kubernetes.io/proxy-buffer-size"   = "16k"
+      "nginx.ingress.kubernetes.io/proxy-read-timeout"  = "600"
+      "nginx.ingress.kubernetes.io/proxy-send-timeout"  = "600"
+    }
+  }
+
+  spec {
+    ingress_class_name = "nginx"
+    
+    rule {
+      host = "grafana.local"
+
+      http {
+        path {
+          path = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "grafana"
+              port {
+                number = 3000
+              }
+            }
+          }
+
+        }
+      }
+    }
+
+    rule {
+      host = "victoria.local"
+
+      http {
+        path {
+          path = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "victoria-metrics"
+              port {
+                number = 8428
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    rule {
+      host = "kibana.local"
+
+      http {
+        path {
+          path = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "kibana"
+              port {
+                number = 5601
+              }
+            }
+          }
+        }
+
+        path {
+          path = "/spaces"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "kibana"
+              port {
+                number = 5601
+              }
+            }
+          }
+        }
+      }
+    }  
+}
+}
+      
