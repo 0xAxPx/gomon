@@ -386,6 +386,326 @@ resource "kubernetes_ingress_v1" "monitoring_ingress" {
         }
       }
     }  
+  }
+}
+
+
+# ES Config Map (Nginx)
+resource "kubernetes_config_map" "elasticsearch_lb_config" {
+  metadata {
+    name = "elasticsearch-lb-config"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+  }
+data = {
+  "nginx.conf" = <<EOF
+events {
+        worker_connections 1024;
+    }
+    
+    http {
+        # ✅ ROBUST: Extended timeouts for external VMs
+        proxy_connect_timeout       45s;
+        proxy_send_timeout          90s;
+        proxy_read_timeout          300s;
+        
+        # ✅ CONNECTION POOLING: Optimized for external connections
+        upstream elasticsearch_cluster {
+            # Primary ES node - EXTERNAL VM
+            server 192.168.0.45:9200 max_fails=3 fail_timeout=30s weight=2;
+            # Secondary ES node - EXTERNAL VM  
+            server 192.168.0.157:9200 max_fails=3 fail_timeout=30s weight=1;
+            
+            # External connection optimization
+            keepalive 4;
+            keepalive_requests 1000;
+            keepalive_timeout 300s;
+        }
+        
+        # ✅ HEALTH CHECK: LB internal health
+        server {
+            listen 8080;
+            
+            location /health {
+                access_log off;
+                return 200 "nginx-lb-operational\n";
+                add_header Content-Type text/plain;
+            }
+            
+            # ✅ EXTERNAL HEALTH: Proxy ES cluster health
+            location /es-health {
+                proxy_pass http://elasticsearch_cluster/_cluster/health;
+                proxy_connect_timeout 10s;
+                proxy_read_timeout 30s;
+                access_log off;
+            }
+            
+            # ✅ DEBUGGING: Individual node health checks
+            location /es1-health {
+                proxy_pass http://192.168.0.45:9200/_cluster/health;
+                proxy_connect_timeout 5s;
+                proxy_read_timeout 10s;
+                access_log off;
+            }
+            
+            location /es2-health {
+                proxy_pass http://192.168.0.157:9200/_cluster/health;
+                proxy_connect_timeout 5s;
+                proxy_read_timeout 10s;
+                access_log off;
+            }
+        }
+        
+        # ✅ MAIN PROXY: Elasticsearch API
+        server {
+            listen 9200;
+            
+            # Buffer settings for large ES responses
+            proxy_buffer_size 128k;
+            proxy_buffers 8 256k;
+            proxy_busy_buffers_size 512k;
+            proxy_temp_file_write_size 512k;
+            
+            # ✅ ALL TRAFFIC: Route to ES cluster
+            location / {
+                proxy_pass http://elasticsearch_cluster;
+                
+                # Essential headers
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header Connection "";
+                
+                # ✅ EXTERNAL VM TIMEOUTS: Generous for network latency
+                proxy_connect_timeout 45s;
+                proxy_send_timeout 90s;
+                proxy_read_timeout 600s;    # ES searches can be slow
+                
+                # ✅ FAILOVER: Automatic retry on external VM failure
+                proxy_next_upstream error timeout http_502 http_503 http_504;
+                proxy_next_upstream_tries 3;
+                proxy_next_upstream_timeout 60s;
+                
+                # Large request handling
+                client_max_body_size 100m;
+                proxy_request_buffering off;
+                
+                # Add debugging headers
+                add_header X-Upstream-Server $upstream_addr always;
+                add_header X-Response-Time $upstream_response_time always;
+            }
+        }
+        
+        # Logging
+        error_log /var/log/nginx/error.log info;
+        access_log /var/log/nginx/access.log;
+    }
+  EOF
 }
 }
-      
+# ES Deployment
+resource "kubernetes_deployment" "elasticsearch_lb" {
+  metadata {
+    name = "elasticsearch-lb"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app = "elasticsearch-lb"
+      managed-by = "terraform"
+    }
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "elasticsearch-lb"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "elasticsearch-lb"
+        }
+      }
+
+      spec {
+        host_network = true
+        dns_policy = "ClusterFirstWithHostNet"
+
+        container {
+          name = "nginx"
+          image = "nginx:1.25-alpine"
+
+          port {
+            container_port = 9200
+            name = "elasticsearch"
+            protocol = "TCP"
+          }
+
+          port {
+            container_port = 8080
+            name = "health"
+            protocol = "TCP"
+          }
+
+          volume_mount {
+            name = "nginx-config"
+            mount_path = "/etc/nginx/nginx.conf"
+            sub_path = "nginx.conf"
+          }
+
+          volume_mount {
+            name = "nginx-logs"
+            mount_path = "/var/log/nginx"
+          }
+
+          resources {
+            requests = {
+              cpu = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu = "300m"
+              memory = "256Mi"
+            }
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 8080
+              host = "localhost"
+            }
+            initial_delay_seconds = 15
+            period_seconds = 10
+            timeout_seconds = 5
+            failure_threshold = 3
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/health"
+              port = 8080
+              host = "localhost"
+            }
+            initial_delay_seconds = 30
+            period_seconds = 30
+            timeout_seconds = 10
+            failure_threshold = 5
+          }
+
+        }
+        init_container {
+          name = "connectivity-test"
+          image = "curlimages/curl:8.4.0"
+
+          command = ["/bin/sh", "-c"]
+          args = [<<EOF
+                echo "🔍 Testing external ES connectivity from HOST NETWORK..."
+                echo "Testing Node 1 (192.168.0.45:9200):"
+                if curl -m 15 -f http://192.168.0.45:9200; then
+                  echo "✅ Node 1 reachable"
+                else
+                  echo "❌ Node 1 FAILED - Exit code: $?"
+                  exit 1
+                fi
+
+                echo "Testing Node 2 (192.168.0.157:9200):"
+                if curl -m 15 -f http://192.168.0.157:9200; then
+                  echo "✅ Node 2 reachable"
+                else
+                  echo "❌ Node 2 FAILED - Exit code: $?"
+                exit 1
+                fi
+
+                echo "🎉 All ES nodes accessible from host network!"
+                EOF 
+                ]
+        }
+
+        volume {
+          name = "nginx-config"
+          config_map {
+            name = kubernetes_config_map.elasticsearch_lb_config.metadata[0].name
+          }
+        }
+
+        volume {
+          name = "nginx-logs"
+          empty_dir {
+            
+          }
+        }
+      }
+    }
+  }
+}
+
+# ES Load Balancer Service
+resource "kubernetes_service" "elasticsearch_lb" {
+  metadata {
+    name      = "elasticsearch-lb"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app        = "elasticsearch-lb"
+      managed-by = "terraform"
+    }
+  }
+
+  spec {
+    type = "ClusterIP"
+    
+    selector = {
+      app = "elasticsearch-lb"
+    }
+    
+    port {
+      port        = 9200
+      target_port = 9200
+      name        = "elasticsearch"
+      protocol    = "TCP"
+    }
+    
+    port {
+      port        = 8080
+      target_port = 8080
+      name        = "health"
+      protocol    = "TCP"
+    }
+  }
+}
+
+# ES Load Balancer Service External
+resource "kubernetes_service" "elasticsearch_lb_external" {
+  metadata {
+    name      = "elasticsearch-lb-external"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels = {
+      app        = "elasticsearch-lb"
+      managed-by = "terraform"
+    }
+  }
+
+  spec {    
+    type = "NodePort"
+    selector = {
+      app = "elasticsearch-lb"
+    }
+    
+    port {
+      port        = 9200
+      target_port = 9200
+      node_port = 30920
+      name        = "elasticsearch"
+    }
+    
+    port {
+      port        = 8080
+      target_port = 8080
+      node_port = 30921
+      name        = "health"
+    }
+  }
+}
