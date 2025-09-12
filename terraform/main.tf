@@ -21,15 +21,23 @@ provider "kubernetes" {
     config_path = "~/.kube/config"
 }
 
+locals {
+  namespace = "monitoring"
+  common_labels = {
+    managed-by  = "terraform"
+    environment = "development"
+    project     = "gomon"
+  }
+}
+
 # Create the monitoring namespace
 resource "kubernetes_namespace" "monitoring" {
   metadata {
-    name = "monitoring"
-    labels = {
-      name        = "monitoring"
-      managed-by  = "terraform"
-      environment = "development"
-    }
+    name = local.namespace
+    labels = merge(local.common_labels, {
+      component = "namespace"
+      tier      = "foundation"
+    })
   }
 }
 
@@ -37,11 +45,11 @@ resource "kubernetes_namespace" "monitoring" {
 resource "kubernetes_persistent_volume_claim" "victoria_metrics_data" {
   metadata {
     name      = "victoria-metrics-data"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "victoria-metrics"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "victoria-metrics"
+      tier      = "storage"
+    })
   }
   
   spec {
@@ -58,11 +66,11 @@ resource "kubernetes_persistent_volume_claim" "victoria_metrics_data" {
 resource "kubernetes_deployment" "victoria_metrics" {
   metadata {
     name      = "victoria-metrics"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "victoria-metrics"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "victoria-metrics"
+      tier      = "database"
+    })
   }
 
   spec {
@@ -123,11 +131,11 @@ resource "kubernetes_deployment" "victoria_metrics" {
 resource "kubernetes_service" "victoria_metrics" {
   metadata {
     name      = "victoria-metrics"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "victoria-metrics"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+    component = "victoria-metrics"
+    tier      = "networking"
+  })
   }
 
   spec {
@@ -148,11 +156,11 @@ resource "kubernetes_service" "victoria_metrics" {
 resource "kubernetes_config_map" "postgres_config" {
   metadata {
     name      = "postgres-config"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "postgres"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "postgresql"
+      tier      = "storage"
+    })
   }
 
   data = {
@@ -165,11 +173,11 @@ resource "kubernetes_config_map" "postgres_config" {
 resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
   metadata {
     name      = "postgres-pvc"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "postgres"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "postgresql"
+      tier      = "storage"
+    })
   }
   
   spec {
@@ -185,11 +193,11 @@ resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
 resource "kubernetes_deployment" "postgres" {
   metadata {
     name      = "postgres"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "postgres"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "postgresql"
+      tier      = "database"
+    })
   }
 
   spec {
@@ -270,11 +278,11 @@ resource "kubernetes_deployment" "postgres" {
 resource "kubernetes_service" "postgres" {
   metadata {
     name      = "postgres"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "postgres"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "postgresql"
+      tier      = "networking"
+    })
   }
 
   spec {
@@ -296,11 +304,11 @@ resource "kubernetes_service" "postgres" {
 resource "kubernetes_ingress_v1" "monitoring_ingress" {
   metadata {
     name      = "monitoring-ingress"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "monitoring-ingress"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "ingress"
+      tier      = "networking"
+    })
     annotations = {
       "nginx.ingress.kubernetes.io/rewrite-target"      = "/"
       "nginx.ingress.kubernetes.io/proxy-buffer-size"   = "16k"
@@ -394,10 +402,14 @@ resource "kubernetes_ingress_v1" "monitoring_ingress" {
 resource "kubernetes_config_map" "elasticsearch_lb_config" {
   metadata {
     name = "elasticsearch-lb-config"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "elasticsearch-loadbalancer"
+      tier      = "networking"
+    })
   }
 data = {
-  "nginx.conf" = <<EOF
+  "nginx.conf" = <<-EOF
 events {
         worker_connections 1024;
     }
@@ -507,11 +519,11 @@ events {
 resource "kubernetes_deployment" "elasticsearch_lb" {
   metadata {
     name = "elasticsearch-lb"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app = "elasticsearch-lb"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "elasticsearch-loadbalancer"
+      tier      = "networking"
+    })
   }
 
   spec {
@@ -643,15 +655,15 @@ resource "kubernetes_deployment" "elasticsearch_lb" {
   }
 }
 
-# ES Load Balancer Service
+#ES Load Balancer Service
 resource "kubernetes_service" "elasticsearch_lb" {
   metadata {
     name      = "elasticsearch-lb"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "elasticsearch-lb"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "elasticsearch-loadbalancer"
+      tier      = "networking"
+    })
   }
 
   spec {
@@ -681,11 +693,11 @@ resource "kubernetes_service" "elasticsearch_lb" {
 resource "kubernetes_service" "elasticsearch_lb_external" {
   metadata {
     name      = "elasticsearch-lb-external"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels = {
-      app        = "elasticsearch-lb"
-      managed-by = "terraform"
-    }
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "elasticsearch-loadbalancer"
+      tier      = "networking"
+    })
   }
 
   spec {    
