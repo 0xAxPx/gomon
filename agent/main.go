@@ -203,8 +203,8 @@ func initJaeger() (opentracing.Tracer, func(), error) {
 			Param: 1, // Sample 100% of traces for development
 		},
 		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans:           true,                             // Enable span logging for debugging
-			LocalAgentHostPort: "http://jaeger:14268/api/traces", // Jaeger agent HTTP endpoint
+			LogSpans:          true,                             // Enable span logging for debugging
+			CollectorEndpoint: "http://jaeger:14268/api/traces", // Jaeger agent HTTP endpoint
 		},
 	}
 
