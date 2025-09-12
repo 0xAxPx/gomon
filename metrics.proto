@@ -27,6 +27,13 @@ message Metric {
     // Network statistics
     repeated NetworkUsage net_stats = 9;
 
+    // For tracing
+    string correlation_id = 10;           // Unique ID to track metric through pipeline
+    string trace_start_time = 11;         // When Agent started collection
+    string kafka_publish_time = 12;       // When sent to Kafka  
+    string aggregator_received_time = 13; // When Aggregator got it
+    string vm_publish_time = 14;          // When sent to VictoriaMetrics
+
 }
 
 message DiskUsage {

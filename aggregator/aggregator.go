@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
@@ -77,7 +78,8 @@ func StartAggregator(logger *log.Logger) error {
 				continue
 			}
 
-			err = processAndSendMetrics(msg.Value, logger)
+			aggregatorReceivedTime := time.Now().UTC()
+			err = processAndSendMetrics(msg.Value, logger, aggregatorReceivedTime)
 			if err != nil {
 				logger.Printf("Error processing message: %v", err)
 			}
@@ -85,18 +87,18 @@ func StartAggregator(logger *log.Logger) error {
 	}
 }
 
-func sendNetStats(metric *pb.Metric, logger *log.Logger) error {
+func sendNetStats(metric *pb.Metric, correlationID string, logger *log.Logger) error {
 	for _, net := range metric.NetStats {
 		if net != nil {
 
-			err := sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp, logger)
+			err := sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp, correlationID, logger)
 			if err != nil {
 				return fmt.Errorf("error sending Cumulative Inet Bytes Recv (MB) metric: %v", err)
 			} else {
 				log.Println("Successfully sent Inet Bytes Recv (MB) metrics to VictoriaMetrics")
 			}
 
-			err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp, logger)
+			err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp, correlationID, logger)
 			if err != nil {
 				return fmt.Errorf("error sending Cumulative Inet Bytes Sent (MB) metric: %v", err)
 			} else {
@@ -108,28 +110,33 @@ func sendNetStats(metric *pb.Metric, logger *log.Logger) error {
 }
 
 // processAndSendMetrics processes and sends separate metrics to VictoriaMetrics
-func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
+func processAndSendMetrics(protoData []byte, logger *log.Logger, aggregatorReceivedTime time.Time) error {
 	var metric pb.Metric
 	err := proto.Unmarshal(protoData, &metric)
 	if err != nil {
 		return fmt.Errorf("could not unmarshal protobuf data: %v", err)
 	}
 
-	err = sendMetricToVictoria("cpu_usage_percent", metric.CpuUsagePercent, metric.Timestamp, logger)
+	correlationID := metric.CorrelationId
+	kafkaLatency := time.Since(aggregatorReceivedTime)
+	logger.Printf("Kafka vs Aggregator publish latency: %v (CorrelationID: %s)",
+		kafkaLatency, correlationID)
+
+	err = sendMetricToVictoria("cpu_usage_percent", metric.CpuUsagePercent, metric.Timestamp, correlationID, logger)
 	if err != nil {
 		return fmt.Errorf("error sending CPU metric: %v", err)
 	} else {
 		logger.Println("Successfully sent CPU metrics to VictoriaMetrics")
 	}
 
-	err = sendMetricToVictoria("mem_usage_percent", metric.MemoryUsedPercent, metric.Timestamp, logger)
+	err = sendMetricToVictoria("mem_usage_percent", metric.MemoryUsedPercent, metric.Timestamp, correlationID, logger)
 	if err != nil {
 		return fmt.Errorf("error sending MemUsage metric: %v", err)
 	} else {
 		logger.Println("Successfully sent Mem metrics to VictoriaMetrics")
 	}
 
-	err = sendMetricToVictoria("dsk_used_gb", float32(metric.MemoryUsedGb), metric.Timestamp, logger)
+	err = sendMetricToVictoria("dsk_used_gb", float32(metric.MemoryUsedGb), metric.Timestamp, correlationID, logger)
 	if err != nil {
 		return fmt.Errorf("error sending Disk Used GB metric: %v", err)
 	} else {
@@ -139,7 +146,7 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
 	// Iterating Disk stats
 	for _, disk := range metric.DiskStats {
 		if disk != nil {
-			err = sendMetricToVictoria("disk_used_percent", float32(disk.UsedPercent), metric.Timestamp, logger)
+			err = sendMetricToVictoria("disk_used_percent", float32(disk.UsedPercent), metric.Timestamp, correlationID, logger)
 			if err != nil {
 				return fmt.Errorf("error sending Disk Used Percent metric: %v", err)
 			} else {
@@ -149,7 +156,7 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
 	}
 
 	// Iterating Net stats
-	if err := sendNetStats(&metric, logger); err != nil {
+	if err := sendNetStats(&metric, correlationID, logger); err != nil {
 		return fmt.Errorf("error sending Net Stats: %v", err)
 	}
 
@@ -177,7 +184,7 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger) error {
 }
 
 // sendMetricToVictoria sends individual metrics to VictoriaMetrics
-func sendMetricToVictoria(metricName string, value float32, timestampStr string, logger *log.Logger) error {
+func sendMetricToVictoria(metricName string, value float32, timestampStr string, correlationID string, logger *log.Logger) error {
 	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid timestamp format: %v", err)
@@ -192,9 +199,10 @@ func sendMetricToVictoria(metricName string, value float32, timestampStr string,
 	// Prepare the payload for VictoriaMetrics
 	data := map[string]interface{}{
 		"metric": map[string]string{
-			"__name__": metricName,
-			"job":      "metrics-aggregator",
-			"instance": hostname + "-agg",
+			"__name__":       metricName,
+			"job":            "metrics-aggregator",
+			"instance":       hostname + "-agg",
+			"correlation_id": correlationID,
 		},
 		"values":     []float64{float64(value)},
 		"timestamps": []int64{timestamp * 1000},
