@@ -394,6 +394,26 @@ resource "kubernetes_ingress_v1" "monitoring_ingress" {
         }
       }
     }  
+
+    rule {
+      host = "jaeger.local"
+
+      http {
+        path {
+          path = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "jaeger"
+              port {
+                number = 16686
+              }
+            }
+          }
+        }
+      }
+    }  
   }
 }
 
@@ -718,6 +738,181 @@ resource "kubernetes_service" "elasticsearch_lb_external" {
       target_port = 8080
       node_port = 30921
       name        = "health"
+    }
+  }
+}
+
+
+# Jaeger Deployment
+resource "kubernetes_deployment" "jaeger" {
+  metadata {
+    name      = "jaeger"
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "jaeger"
+      tier      = "tracing"
+    })
+  }
+
+  spec {
+    replicas = 1
+    selector {
+      match_labels = {
+        app = "jaeger"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "jaeger"
+        }
+      }
+
+      spec {
+        container {
+          name  = "jaeger"
+          image = "jaegertracing/all-in-one:1.52"
+
+          # Jaeger UI
+          port {
+            container_port = 16686
+            name = "ui"
+          }
+
+          # OTLP receivers
+          port {
+            container_port = 4317
+            name = "otlp-grpc"
+          }
+
+          port {
+            container_port = 4318
+            name = "otlp-http"
+          }
+
+          # Jaeger native protocols
+          port {
+            container_port = 14250
+            name = "grpc"
+          }
+
+          port {
+            container_port = 6832
+            name = "agent-udp"
+            protocol = "UDP"
+          }
+
+          port {
+            container_port = 14268
+            name = "agent-http"
+          }
+
+          env {
+            name  = "COLLECTOR_OTLP_ENABLED"
+            value = "true"
+          }
+
+          env {
+            name  = "COLLECTOR_ZIPKIN_HTTP_PORT"
+            value = "9411"
+          }
+
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "256Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "512Mi"
+            }
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/"
+              port = 16686
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 10
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/"
+              port = 16686
+            }
+            initial_delay_seconds = 60
+            period_seconds        = 30
+          }
+        }
+      }
+    }
+  }
+}
+
+# Jaeger Service
+resource "kubernetes_service" "jaeger" {
+  metadata {
+    name      = "jaeger"
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "jaeger"
+      tier      = "networking"
+    })
+  }
+
+  spec {
+    type = "ClusterIP"
+    
+    selector = {
+      app = "jaeger"
+    }
+    
+    # Jaeger UI
+    port {
+      port        = 16686
+      target_port = 16686
+      name        = "ui"
+      protocol    = "TCP"
+    }
+
+    # OTLP receivers
+    port {
+      port        = 4317
+      target_port = 4317
+      name        = "otlp-grpc"
+      protocol    = "TCP"
+    }
+
+    port {
+      port        = 4318
+      target_port = 4318
+      name        = "otlp-http"
+      protocol    = "TCP"
+    }
+
+    # Jaeger native
+    port {
+      port        = 14250
+      target_port = 14250
+      name        = "grpc"
+      protocol    = "TCP"
+    }
+
+    port {
+      port        = 6832
+      target_port = 6832
+      name        = "agent-udp"
+      protocol    = "UDP"
+    }
+
+    port {
+      port        = 14268
+      target_port = 14268
+      name        = "agent-http"
+      protocol    = "TCP"
     }
   }
 }

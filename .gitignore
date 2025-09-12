@@ -8,3 +8,5 @@ report-task.txt
 sonar-project.properties.bak
 # DS store
 .DS_Store
+# Terraform
+.terraform.lock*

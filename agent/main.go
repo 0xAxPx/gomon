@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -203,10 +204,19 @@ func main() {
 	defer producer.Close()
 
 	i := 0
-	t := 20
+	sleepInSeconds := 20
 	for {
+
+		//Generate CorrelationID
+		correlationID := generateCorrelationID()
+
+		// Time to start sending metric
+		traceStartTime := time.Now().UTC()
+
 		metric := &pb.Metric{
-			Timestamp: strconv.FormatInt(time.Now().Unix(), 10),
+			Timestamp:      strconv.FormatInt(time.Now().Unix(), 10),
+			CorrelationId:  correlationID,
+			TraceStartTime: traceStartTime.Format(time.RFC3339Nano),
 		}
 		i++
 
@@ -227,12 +237,19 @@ func main() {
 		// Log the actual metric data being sent
 		logger.Printf("Sending to Kafka (Iteration %d):\n%s", i, formatMetricForLog(metric))
 
+		kafkaPublishStart := time.Now().UTC()
+		metric.KafkaPublishTime = kafkaPublishStart.Format(time.RFC3339Nano)
+
 		if err := producer.SendMessage(data); err != nil {
 			logger.Printf("ERROR: Failed to send message (Iteration %d): %v", i, err)
+		} else {
+			kafkaLatency := time.Since(kafkaPublishStart)
+			logger.Printf("Agent vs Kafka publish latency: %v (CorrelationID: %s)",
+				kafkaLatency, correlationID)
 		}
 
-		logger.Printf("INFO: Cycle completed (Iteration %d, Sleep: %ds)", i, t)
-		time.Sleep(time.Duration(t) * time.Second)
+		logger.Printf("INFO: Cycle completed (Iteration %d, Sleep: %ds)", i, sleepInSeconds)
+		time.Sleep(time.Duration(sleepInSeconds) * time.Second)
 	}
 }
 
@@ -302,4 +319,8 @@ func formatMetricForLog(m *pb.Metric) string {
 	}
 
 	return builder.String()
+}
+
+func generateCorrelationID() string {
+	return uuid.New().String()
 }
