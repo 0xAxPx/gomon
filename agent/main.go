@@ -23,6 +23,11 @@ import (
 	"strconv"
 
 	"gomon/kafka"
+
+	"github.com/opentracing/opentracing-go"
+	"github.com/uber/jaeger-client-go"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
+	"github.com/uber/jaeger-lib/metrics"
 )
 
 func logGoroutineInfo() string {
@@ -40,28 +45,41 @@ func logGoroutineInfo() string {
 	return ""
 }
 
-func collectCPU(wg *sync.WaitGroup, metrics *pb.Metric) {
+func collectCPU(wg *sync.WaitGroup, metrics *pb.Metric, parentSpan opentracing.Span) {
 	defer wg.Done()
+
+	// Span for CPU
+	cpuSpan := opentracing.StartSpan("collect-cpu", opentracing.ChildOf(parentSpan.Context()))
+	defer cpuSpan.Finish()
+
 	log.Printf("%s: Collect CPU stats...", logGoroutineInfo())
 	cpuUsage, err := cpu.Percent(time.Second, false)
 	if err != nil {
 		log.Println("Error getting CPU usage:", err)
+		cpuSpan.SetTag("error", true)
 		return
 	}
 
 	if len(cpuUsage) > 0 {
 		metrics.CpuUsagePercent = float32(cpuUsage[0])
+		cpuSpan.SetTag("cpu_usage_percent", cpuUsage[0])
 	}
 
 	log.Printf("%s: CPU Usage: %.2f%%\n", logGoroutineInfo(), cpuUsage[0])
 }
 
-func collectMemory(wg *sync.WaitGroup, metrics *pb.Metric) {
+func collectMemory(wg *sync.WaitGroup, metrics *pb.Metric, parentSpan opentracing.Span) {
 	defer wg.Done()
+
+	// Span for memory
+	memSpan := opentracing.StartSpan("collect-memory", opentracing.ChildOf(parentSpan.Context()))
+	defer memSpan.Finish()
+
 	log.Printf("%s: Collect Memory stats...", logGoroutineInfo())
 	vMem, err := mem.VirtualMemory()
 	if err != nil {
 		log.Println("Error getting memory usage:", err)
+		memSpan.SetTag("error", true)
 		return
 	}
 
@@ -81,18 +99,27 @@ func collectMemory(wg *sync.WaitGroup, metrics *pb.Metric) {
 	metrics.MemoryUsedGb = usedVm
 	metrics.MemoryFreeGb = freeVm
 
+	memSpan.SetTag("memory_used_percent", vMem.UsedPercent)
+	memSpan.SetTag("memory_total_gb", totalVm)
+
 	log.Printf("%s: Memory Usage: %.2f%% (Total: %v Gb, Used: %v Gb, Free: %v Mb, Buffers: %v, Cached: %v),"+
 		"Swap Usage: SwapTotal: %v, SwapUsed: %v, SwapFree: %v\n", logGoroutineInfo(),
 		vMem.UsedPercent, totalVm, usedVm, freeVm, buffers, cached,
 		swapTotal, swapUsed, swapFree)
 }
 
-func collectDisk(wg *sync.WaitGroup, metric *pb.Metric) {
+func collectDisk(wg *sync.WaitGroup, metric *pb.Metric, parentSpan opentracing.Span) {
 	defer wg.Done()
+
+	// Span for disk stats
+	diskSpan := opentracing.StartSpan("collect-disk", opentracing.ChildOf(parentSpan.Context()))
+	defer diskSpan.Finish()
+
 	log.Printf("%s: Collect Disk stats...", logGoroutineInfo())
 	partitions, err := disk.Partitions(false)
 	if err != nil {
 		log.Printf("Error fetching disk partitions: %v\n", err)
+		diskSpan.SetTag("error", true)
 		return
 	}
 
@@ -115,12 +142,19 @@ func collectDisk(wg *sync.WaitGroup, metric *pb.Metric) {
 
 		log.Printf("%s: Disk Usage on %v: %.2f%% (Total: %v Gb, Used: %v Gb)\n", logGoroutineInfo(),
 			partition.Mountpoint, usage.UsedPercent, diskTotal, diskUsage)
+
+		diskSpan.SetTag("disk_usage_gb", diskUsage)
 	}
 
 }
 
-func collectNet(wg *sync.WaitGroup, metric *pb.Metric) {
+func collectNet(wg *sync.WaitGroup, metric *pb.Metric, parentSpan opentracing.Span) {
 	defer wg.Done()
+
+	// Span for net stats
+	netSpan := opentracing.StartSpan("collect-network", opentracing.ChildOf(parentSpan.Context()))
+	defer netSpan.Finish()
+
 	log.Printf("%s: Collect Network stats...", logGoroutineInfo())
 	// Get initial network stats
 	prevCounters, err := net.IOCounters(false)
@@ -156,6 +190,40 @@ func collectNet(wg *sync.WaitGroup, metric *pb.Metric) {
 			float64(bytesSentDelta), float64(bytesRecvDelta))
 
 	}
+
+	netSpan.SetTag("interfaces_processed", len(metric.NetStats))
+}
+
+// Jaeger
+func initJaeger() (opentracing.Tracer, func(), error) {
+	cfg := jaegercfg.Configuration{
+		ServiceName: "gomon-agent",
+		Sampler: &jaegercfg.SamplerConfig{
+			Type:  jaeger.SamplerTypeConst,
+			Param: 1, // Sample 100% of traces for development
+		},
+		Reporter: &jaegercfg.ReporterConfig{
+			LogSpans:           true,          // Enable span logging for debugging
+			LocalAgentHostPort: "jaeger:6832", // Jaeger agent UDP endpoint
+		},
+	}
+
+	jLogger := jaeger.StdLogger
+	jMetricsFactory := metrics.NullFactory
+
+	tracer, closer, err := cfg.NewTracer(
+		jaegercfg.Logger(jLogger),
+		jaegercfg.Metrics(jMetricsFactory),
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot initialize jaeger tracer: %v", err)
+	}
+
+	// Set as global tracer
+	opentracing.SetGlobalTracer(tracer)
+
+	return tracer, func() { closer.Close() }, nil
 }
 
 func initLogger() *log.Logger {
@@ -189,6 +257,13 @@ func main() {
 
 	logger.Println("MAIN STARTED")
 
+	// init jaeger
+	tracer, closer, err := initJaeger()
+	if err != nil {
+		logger.Fatalf("Failed to initialize Jaeger tracer: %v", err)
+	}
+	defer closer()
+
 	// Read Kafka env variables
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
@@ -210,6 +285,10 @@ func main() {
 		//Generate CorrelationID
 		correlationID := generateCorrelationID()
 
+		rootSpan := tracer.StartSpan("gomon-metrics-collection")
+		rootSpan.SetTag("correlation_id", correlationID)
+		rootSpan.SetTag("iteration", i+1)
+
 		// Time to start sending metric
 		traceStartTime := time.Now().UTC()
 
@@ -222,31 +301,42 @@ func main() {
 
 		var wg sync.WaitGroup
 		wg.Add(4)
-		go collectCPU(&wg, metric)
-		go collectMemory(&wg, metric)
-		go collectDisk(&wg, metric)
-		go collectNet(&wg, metric)
+		go collectCPU(&wg, metric, rootSpan)
+		go collectMemory(&wg, metric, rootSpan)
+		go collectDisk(&wg, metric, rootSpan)
+		go collectNet(&wg, metric, rootSpan)
 		wg.Wait()
 
 		data, err := proto.Marshal(metric)
 		if err != nil {
 			logger.Printf("ERROR: Failed to marshal metric (Iteration %d): %v", i, err)
+			rootSpan.SetTag("error", true)
+			rootSpan.Finish()
 			continue
 		}
 
 		// Log the actual metric data being sent
 		logger.Printf("Sending to Kafka (Iteration %d):\n%s", i, formatMetricForLog(metric))
 
+		kafkaSpan := opentracing.StartSpan("kafka-publish", opentracing.ChildOf(rootSpan.Context()))
 		kafkaPublishStart := time.Now().UTC()
 		metric.KafkaPublishTime = kafkaPublishStart.Format(time.RFC3339Nano)
 
 		if err := producer.SendMessage(data); err != nil {
 			logger.Printf("ERROR: Failed to send message (Iteration %d): %v", i, err)
+			kafkaSpan.SetTag("error", true)
+			kafkaSpan.Finish()
+			rootSpan.SetTag("error", true)
 		} else {
 			kafkaLatency := time.Since(kafkaPublishStart)
 			logger.Printf("Agent vs Kafka publish latency: %v (CorrelationID: %s)",
 				kafkaLatency, correlationID)
+			kafkaSpan.SetTag("latency_ms", kafkaLatency.Milliseconds())
+			kafkaSpan.SetTag("success", true)
+			kafkaSpan.Finish()
 		}
+
+		rootSpan.Finish()
 
 		logger.Printf("INFO: Cycle completed (Iteration %d, Sleep: %ds)", i, sleepInSeconds)
 		time.Sleep(time.Duration(sleepInSeconds) * time.Second)
