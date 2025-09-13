@@ -228,7 +228,7 @@ func initJaeger() (opentracing.Tracer, func(), error) {
 	)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot initialize jaeger tracer: %v", err)
+		return nil, nil, fmt.Errorf("cannot initialize jaeger tracer for agent service: %v", err)
 	}
 
 	// Set as global tracer

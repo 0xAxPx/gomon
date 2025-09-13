@@ -111,20 +111,19 @@ func StartAggregator(logger *log.Logger) error {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	for {
-
 		select {
 		case <-sigs:
 			logger.Println("Received termination signal, stopping aggregator...")
 			return nil
 		default:
-			aggregatorReceivedTime := time.Now().UTC()
+			kafkaReceiveStart := time.Now().UTC()
 			msg, err := reader.ReadMessage(context.Background())
 			if err != nil {
 				logger.Printf("Could not read message: %v", err)
 				continue
 			}
 
-			err = processAndSendMetrics(msg.Value, logger, aggregatorReceivedTime, tracer)
+			err = processAndSendMetrics(msg.Value, logger, kafkaReceiveStart, tracer)
 			if err != nil {
 				logger.Printf("Error processing message: %v", err)
 			}
@@ -132,166 +131,159 @@ func StartAggregator(logger *log.Logger) error {
 	}
 }
 
-func sendNetStats(metric *pb.Metric, correlationID string, rootSpan opentracing.Span, logger *log.Logger) error {
-	for _, net := range metric.NetStats {
-		if net != nil {
-
-			err := sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp, correlationID, rootSpan, logger)
-			if err != nil {
-				return fmt.Errorf("error sending Cumulative Inet Bytes Recv (MB) metric: %v", err)
-			} else {
-				log.Println("Successfully sent Inet Bytes Recv (MB) metrics to VictoriaMetrics")
-			}
-
-			err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp, correlationID, rootSpan, logger)
-			if err != nil {
-				return fmt.Errorf("error sending Cumulative Inet Bytes Sent (MB) metric: %v", err)
-			} else {
-				log.Println("Successfully sent Cumulative Inet Bytes Sent (MB) metrics to VictoriaMetrics")
-			}
-		}
-	}
-	return nil
-}
-
 // processAndSendMetrics processes and sends separate metrics to VictoriaMetrics
-func processAndSendMetrics(protoData []byte, logger *log.Logger, aggregatorReceivedTime time.Time, tracer opentracing.Tracer) error {
-	var metric pb.Metric
-	err := proto.Unmarshal(protoData, &metric)
-	if err != nil {
-		return fmt.Errorf("could not unmarshal protobuf data: %v", err)
-	}
-
-	//kafka-consume span
-
-	correlationID := metric.CorrelationId
+func processAndSendMetrics(protoData []byte, logger *log.Logger, kafkaReceiveStart time.Time, tracer opentracing.Tracer) error {
 
 	// Create NEW root span for aggregator
 	aggregatorRootSpan := tracer.StartSpan("gomon-aggregator-processing")
 	defer aggregatorRootSpan.Finish()
+
+	// SPAN 1: kafka-consume (includes unmarshalling)
+	kafkaSpan := opentracing.StartSpan("kafka-consume", opentracing.ChildOf(aggregatorRootSpan.Context()))
+
+	var metric pb.Metric
+	err := proto.Unmarshal(protoData, &metric)
+	if err != nil {
+		kafkaSpan.SetTag("error", true)
+		kafkaSpan.Finish()
+		aggregatorRootSpan.SetTag("error", true)
+		return fmt.Errorf("could not unmarshal protobuf data: %v", err)
+	}
+
+	correlationID := metric.CorrelationId
 	aggregatorRootSpan.SetTag("correlation_id", correlationID)
 
-	kafkaLatency := time.Since(aggregatorReceivedTime)
-	logger.Printf("Kafka vs Aggregator publish latency: %v (CorrelationID: %s)",
-		kafkaLatency, correlationID)
-
-	kafkaSpan := opentracing.StartSpan("kafka-consume", opentracing.ChildOf(aggregatorRootSpan.Context()))
-	kafkaSpan.SetTag("kafka-consume-latency", kafkaLatency)
+	kafkaLatency := time.Since(kafkaReceiveStart)
+	kafkaSpan.SetTag("kafka_latency_ms", kafkaLatency.Milliseconds())
 	kafkaSpan.SetTag("success", true)
 	kafkaSpan.Finish()
 
-	err = sendMetricToVictoria("cpu_usage_percent", metric.CpuUsagePercent, metric.Timestamp, correlationID, aggregatorRootSpan, logger)
-	if err != nil {
-		return fmt.Errorf("error sending CPU metric: %v", err)
-	} else {
-		logger.Println("Successfully sent CPU metrics to VictoriaMetrics")
-	}
+	logger.Printf("Kafka vs Aggregator latency: %v (CorrelationID: %s)", kafkaLatency, correlationID)
 
-	err = sendMetricToVictoria("mem_usage_percent", metric.MemoryUsedPercent, metric.Timestamp, correlationID, aggregatorRootSpan, logger)
-	if err != nil {
-		return fmt.Errorf("error sending MemUsage metric: %v", err)
-	} else {
-		logger.Println("Successfully sent Mem metrics to VictoriaMetrics")
-	}
+	// SPAN 2: process-metrics (prepare all metric data)
+	processSpan := opentracing.StartSpan("process-metrics", opentracing.ChildOf(aggregatorRootSpan.Context()))
 
-	err = sendMetricToVictoria("dsk_used_gb", float32(metric.MemoryUsedGb), metric.Timestamp, correlationID, aggregatorRootSpan, logger)
-	if err != nil {
-		return fmt.Errorf("error sending Disk Used GB metric: %v", err)
-	} else {
-		logger.Println("Successfully sent Disk Used (GB) metrics to VictoriaMetrics")
-	}
+	// Prepare all metrics data for VictoriaMetrics
+	var metricsData []map[string]interface{}
 
-	// Iterating Disk stats
-	for _, disk := range metric.DiskStats {
-		if disk != nil {
-			err = sendMetricToVictoria("disk_used_percent", float32(disk.UsedPercent), metric.Timestamp, correlationID, aggregatorRootSpan, logger)
-			if err != nil {
-				return fmt.Errorf("error sending Disk Used Percent metric: %v", err)
-			} else {
-				logger.Println("Successfully sent Disk Used(%) metrics to VictoriaMetrics")
-			}
-		}
-	}
-
-	// Iterating Net stats
-	if err := sendNetStats(&metric, correlationID, aggregatorRootSpan, logger); err != nil {
-		return fmt.Errorf("error sending Net Stats: %v", err)
-	}
-
-	// for _, net := range metric.NetStats {
-	// 	if net != nil {
-
-	// 		err = sendMetricToVictoria("int_bytes_recv_mb", float32(net.BytesReceived>>20), metric.Timestamp)
-	// 		if err != nil {
-	// 			return fmt.Errorf("error sending Cumulative Inet Bytes Recv (MB) metric: %v", err)
-	// 		} else {
-	// 			log.Println("Successfully sent Inet Bytes Recv (MB) metrics to VictoriaMetrics")
-	// 		}
-
-	// 		err = sendMetricToVictoria("int_bytes_sent_mb", float32(net.BytesSent>>20), metric.Timestamp)
-	// 		if err != nil {
-	// 			return fmt.Errorf("error sending Cumulative Inet Bytes Sent (MB) metric: %v", err)
-	// 		} else {
-	// 			log.Println("Successfully sent Cumulative Inet Bytes Sent (MB) metrics to VictoriaMetrics")
-	// 		}
-	// 	}
-	// }
-
-	logger.Println("Successfully processed and sent metrics to VictoriaMetrics")
-	return nil
-}
-
-// sendMetricToVictoria sends individual metrics to VictoriaMetrics
-func sendMetricToVictoria(metricName string, value float32, timestampStr string, correlationID string, rootSpan opentracing.Span, logger *log.Logger) error {
-	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid timestamp format: %v", err)
-	}
-
-	// Get Hostname
+	// Get hostname once
 	hostname, err := os.Hostname()
 	if err != nil {
+		processSpan.SetTag("error", true)
+		processSpan.Finish()
 		return fmt.Errorf("error getting hostname: %v", err)
 	}
 
-	timeToProcess := time.Now().UTC()
+	// Process individual metrics
+	metricsProcessed := 0
 
-	// Prepare the payload for VictoriaMetrics
-	data := map[string]interface{}{
+	// CPU metric
+	if metric.CpuUsagePercent > 0 {
+		data := createMetricData("cpu_usage_percent", float64(metric.CpuUsagePercent), metric.Timestamp, correlationID, hostname)
+		metricsData = append(metricsData, data)
+		metricsProcessed++
+	}
+
+	// Memory metric
+	if metric.MemoryUsedPercent > 0 {
+		data := createMetricData("mem_usage_percent", float64(metric.MemoryUsedPercent), metric.Timestamp, correlationID, hostname)
+		metricsData = append(metricsData, data)
+		metricsProcessed++
+	}
+
+	// Disk used GB metric
+	if metric.MemoryUsedGb > 0 {
+		data := createMetricData("dsk_used_gb", float64(metric.MemoryUsedGb), metric.Timestamp, correlationID, hostname)
+		metricsData = append(metricsData, data)
+		metricsProcessed++
+	}
+
+	// Disk stats
+	for _, disk := range metric.DiskStats {
+		if disk != nil {
+			data := createMetricData("disk_used_percent", float64(disk.UsedPercent), metric.Timestamp, correlationID, hostname)
+			metricsData = append(metricsData, data)
+			metricsProcessed++
+		}
+	}
+
+	// Network stats
+	for _, net := range metric.NetStats {
+		if net != nil {
+			// Bytes received
+			data1 := createMetricData("int_bytes_recv_mb", float64(net.BytesReceived>>20), metric.Timestamp, correlationID, hostname)
+			metricsData = append(metricsData, data1)
+
+			// Bytes sent
+			data2 := createMetricData("int_bytes_sent_mb", float64(net.BytesSent>>20), metric.Timestamp, correlationID, hostname)
+			metricsData = append(metricsData, data2)
+			metricsProcessed += 2
+		}
+	}
+
+	processSpan.SetTag("metrics_processed", metricsProcessed)
+	processSpan.SetTag("success", true)
+	processSpan.Finish()
+
+	// SPAN 3: victoria-metrics-publish (all HTTP calls)
+	vmSpan := opentracing.StartSpan("victoria-metrics-publish", opentracing.ChildOf(aggregatorRootSpan.Context()))
+
+	successfulSends := 0
+	failedSends := 0
+
+	for _, data := range metricsData {
+		err := sendToVictoriaMetrics(data, logger)
+		if err != nil {
+			failedSends++
+			logger.Printf("Error sending metric to VictoriaMetrics: %v", err)
+		} else {
+			successfulSends++
+		}
+	}
+
+	vmSpan.SetTag("successful_sends", successfulSends)
+	vmSpan.SetTag("failed_sends", failedSends)
+
+	if failedSends > 0 {
+		vmSpan.SetTag("error", true)
+		aggregatorRootSpan.SetTag("error", true)
+	} else {
+		vmSpan.SetTag("success", true)
+	}
+
+	vmSpan.Finish()
+
+	if failedSends > 0 {
+		return fmt.Errorf("failed to send %d out of %d metrics to VictoriaMetrics", failedSends, len(metricsData))
+	}
+
+	logger.Printf("Successfully processed and sent %d metrics to VictoriaMetrics", successfulSends)
+	return nil
+}
+
+// Helper function to create metric data structure
+func createMetricData(metricName string, value float64, timestampStr string, correlationID string, hostname string) map[string]interface{} {
+	timestamp, _ := strconv.ParseInt(timestampStr, 10, 64)
+
+	return map[string]interface{}{
 		"metric": map[string]string{
 			"__name__":       metricName,
 			"job":            "metrics-aggregator",
 			"instance":       hostname + "-agg",
 			"correlation_id": correlationID,
 		},
-		"values":     []float64{float64(value)},
+		"values":     []float64{value},
 		"timestamps": []int64{timestamp * 1000},
 	}
-
-	// Log the JSON for debugging
-	jsonData, _ := json.Marshal(data)
-	logger.Printf("Sending JSON to VictoriaMetrics: %s\n", string(jsonData))
-
-	metricSpan := opentracing.StartSpan(metricName+"-processing", opentracing.ChildOf(rootSpan.Context()))
-	metricSpan.SetTag("latency_ms", time.Since(timeToProcess))
-	metricSpan.Finish()
-
-	// Send data to VictoriaMetrics
-	return sendToVictoriaMetrics(data, rootSpan, logger)
 }
 
 // sendToVictoriaMetrics sends data to VictoriaMetrics
-func sendToVictoriaMetrics(data map[string]interface{}, rootSpan opentracing.Span, logger *log.Logger) error {
+func sendToVictoriaMetrics(data map[string]interface{}, logger *log.Logger) error {
 
 	victoriaMetrics := os.Getenv("VICTORIA_METRICS_URL")
 	if victoriaMetrics == "" {
 		logger.Fatal("VICTORIA_METRICS_URL environment variable is not set")
 	}
-
-	metricName := data["metric"].(map[string]string)["__name__"]
-	aggregatorVmSpan := opentracing.StartSpan(metricName+"-agg-VM", opentracing.ChildOf(rootSpan.Context()))
-
-	startTimeToSendToVM := time.Now().UTC()
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -308,33 +300,26 @@ func sendToVictoriaMetrics(data map[string]interface{}, rootSpan opentracing.Spa
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		aggregatorVmSpan.SetTag("error", true)
-		aggregatorVmSpan.Finish()
-		rootSpan.Finish()
 		return fmt.Errorf("could not send HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	logger.Printf("Request Body: %s", string(jsonData))
+
+	// Log the JSON for debugging
+	logger.Printf("Sending JSON to VictoriaMetrics: %s", string(jsonData))
 	logger.Printf("Response Status: %d", resp.StatusCode)
 	logger.Printf("Response Body: %s", string(body))
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		aggregatorVmSpan.SetTag("latency_ms", time.Since(startTimeToSendToVM))
-		aggregatorVmSpan.Finish()
-		logger.Printf("Successfully sent metrics to VictoriaMetrics. Status: %s", resp.Status)
-	} else {
-		aggregatorVmSpan.SetTag("error", true)
-		aggregatorVmSpan.Finish()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("unexpected response from VictoriaMetrics: %s", resp.Status)
 	}
 
+	logger.Printf("Successfully sent metrics to VictoriaMetrics. Status: %s", resp.Status)
 	return nil
 }
 
 func main() {
-
 	logger := initLogger()
 	defer func() {
 		if f, ok := logger.Writer().(*os.File); ok {
