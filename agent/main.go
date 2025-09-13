@@ -123,6 +123,10 @@ func collectDisk(wg *sync.WaitGroup, metric *pb.Metric, parentSpan opentracing.S
 		return
 	}
 
+	var totalDiskSpaceGB uint64
+	var totalDiskUsedGB uint64
+	partitionCount := 0
+
 	for _, partition := range partitions {
 		usage, err := disk.Usage(partition.Mountpoint)
 		if err != nil {
@@ -133,6 +137,10 @@ func collectDisk(wg *sync.WaitGroup, metric *pb.Metric, parentSpan opentracing.S
 		diskTotal := usage.Total / (1 << 30)
 		diskUsage := usage.Used / (1 << 30)
 
+		totalDiskSpaceGB += uint64(diskTotal)
+		totalDiskUsedGB += uint64(diskUsage)
+		partitionCount++
+
 		metric.DiskStats = append(metric.DiskStats, &pb.DiskUsage{
 			Mountpoint:  partition.Mountpoint,
 			UsedPercent: float32(usage.UsedPercent),
@@ -140,10 +148,13 @@ func collectDisk(wg *sync.WaitGroup, metric *pb.Metric, parentSpan opentracing.S
 			UsedGb:      usage.Used,
 		})
 
-		log.Printf("%s: Disk Usage on %v: %.2f%% (Total: %v Gb, Used: %v Gb)\n", logGoroutineInfo(),
-			partition.Mountpoint, usage.UsedPercent, diskTotal, diskUsage)
-
-		diskSpan.SetTag("disk_usage_gb", diskUsage)
+		diskSpan.SetTag("partitions_processed", partitionCount)
+		diskSpan.SetTag("total_disk_space_gb", totalDiskSpaceGB)
+		diskSpan.SetTag("total_disk_used_gb", totalDiskUsedGB)
+		if totalDiskSpaceGB > 0 {
+			diskUsagePercent := float64(totalDiskUsedGB) / float64(totalDiskSpaceGB) * 100
+			diskSpan.SetTag("total_disk_used_percent", diskUsagePercent)
+		}
 	}
 
 }
@@ -217,7 +228,7 @@ func initJaeger() (opentracing.Tracer, func(), error) {
 	)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot initialize jaeger tracer: %v", err)
+		return nil, nil, fmt.Errorf("cannot initialize jaeger tracer for agent service: %v", err)
 	}
 
 	// Set as global tracer
