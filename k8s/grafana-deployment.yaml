@@ -23,6 +23,13 @@ spec:
           volumeMounts:
             - name: grafana-storage
               mountPath: /var/lib/grafana
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
       volumes:
         - name: grafana-storage
           emptyDir: {}
@@ -34,10 +41,10 @@ metadata:
   name: grafana
   namespace: monitoring
 spec:
-  type: ClusterIP  # Expose via browser
+  type: ClusterIP 
   selector:
     app: grafana
   ports:
     - protocol: TCP
-      port: 3000      # Service port
-      targetPort: 3000 # Container port
+      port: 3000      
+      targetPort: 3000 

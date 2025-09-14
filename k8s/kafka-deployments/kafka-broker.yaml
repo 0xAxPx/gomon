@@ -63,6 +63,13 @@ spec:
           volumeMounts:
             - name: kafka-data
               mountPath: /bitnami/kafka/data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
   volumeClaimTemplates:
     - metadata:
         name: kafka-data
