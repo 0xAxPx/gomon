@@ -104,10 +104,38 @@ type CreateAlertResponse struct {
 
 type AlertCreator interface {
 	CreateAlert(request CreateAlertRequest) (CreateAlertResponse, error)
+	ListAlerts() (AlertListResponse, error)
 }
 
 type DatabaseAlertCreator struct {
 	db *sql.DB
+}
+
+type Alert struct {
+	ID             uuid.UUID              `json:"id"`
+	AlertGroupID   uuid.UUID              `json:"alert_group_id"`
+	Source         string                 `json:"source"`
+	Severity       string                 `json:"severity"`
+	Status         string                 `json:"status"`
+	Title          string                 `json:"title"`
+	Description    *string                `json:"description,omitempty"`
+	Namespace      *string                `json:"namespace,omitempty"`
+	Labels         map[string]interface{} `json:"labels"`
+	Annotations    map[string]interface{} `json:"annotations"`
+	IncidentID     *uuid.UUID             `json:"incident_id,omitempty"`
+	JaegerTraceID  *string                `json:"jaeger_trace_id,omitempty"`
+	CreatedAt      time.Time              `json:"created_at"`
+	AcknowledgedAt *time.Time             `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy *string                `json:"acknowledged_by,omitempty"`
+	UpdatedAt      time.Time              `json:"updated_at"`
+	ResolvedAt     *time.Time             `json:"resolved_at,omitempty"`
+	AssignedTo     *string                `json:"assigned_to,omitempty"`
+}
+
+type AlertListResponse struct {
+	Alerts []Alert `json:"alerts"`
+	Total  int     `json:"total"`
+	// Future: Page int `json:"page"` for pagination
 }
 
 func (d *DatabaseAlertCreator) CreateAlert(request CreateAlertRequest) (CreateAlertResponse, error) {
@@ -187,6 +215,79 @@ func isDatabaseConstraintError(err error) bool {
 		strings.Contains(errorStr, "violates")
 }
 
+func (d *DatabaseAlertCreator) ListAlerts() (AlertListResponse, error) {
+	query := `SELECT * FROM alerts_active ORDER BY created_at DESC`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return AlertListResponse{}, fmt.Errorf("failed to query alerts: %w", err)
+	}
+
+	defer rows.Close()
+
+	var alerts []Alert
+
+	for rows.Next() {
+		var alert Alert
+		var labelsJSON []byte
+		var annotationsJSON []byte
+
+		err := rows.Scan(
+			&alert.ID,
+			&alert.AlertGroupID,
+			&alert.Source,
+			&alert.Severity,
+			&alert.Status,
+			&alert.Title,
+			&alert.Description,
+			&alert.Namespace,
+			&labelsJSON,
+			&annotationsJSON,
+			&alert.IncidentID,
+			&alert.JaegerTraceID,
+			&alert.CreatedAt,
+			&alert.AcknowledgedAt,
+			&alert.AcknowledgedBy,
+			&alert.UpdatedAt,
+			&alert.ResolvedAt,
+			&alert.AssignedTo,
+		)
+
+		if err != nil {
+			return AlertListResponse{}, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		if err := json.Unmarshal(labelsJSON, &alert.Labels); err != nil {
+			alert.Labels = make(map[string]interface{})
+		}
+
+		alerts = append(alerts, alert)
+	}
+
+	if err = rows.Err(); err != nil {
+		return AlertListResponse{}, fmt.Errorf("error during row iteration: %w", err)
+	}
+
+	return AlertListResponse{
+		Alerts: alerts,
+		Total:  len(alerts),
+	}, nil
+
+}
+
+func createAlertListHandler(alertCreator AlertCreator) gin.HandlerFunc { // Add parameter
+	return func(ctx *gin.Context) {
+		response, err := alertCreator.ListAlerts() // Call method on interface
+		if err != nil {
+			ctx.JSON(500, gin.H{"error": "Can't return data from db", "details": err.Error()})
+			return
+		}
+
+		// Don't forget to return the response!
+		ctx.JSON(200, response)
+	}
+}
+
 // HTTP Handler for database
 func healthHandler(checker DatabaseHealthChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -218,11 +319,13 @@ func main() {
 	// Checker
 	checker := &PostgreSQLHealthChecker{db: dbPool}
 	alertSaver := &DatabaseAlertCreator{db: dbPool}
+	alertList := &DatabaseAlertCreator{db: dbPool}
 
 	// init Gin engine and add routing
 	router := gin.Default()
 	router.GET("/health/database", healthHandler(checker))
 	router.POST("/api/v1/alerts", createAlertHandler(alertSaver))
+	router.GET("/api/v1/alerts", createAlertListHandler(alertList))
 
 	// Start HTTP server with port from yaml
 	fmt.Printf("Loaded config: Port=%d, DB=%s:%d\n", config.Http.Port, config.Db.Host, config.Db.Port)
