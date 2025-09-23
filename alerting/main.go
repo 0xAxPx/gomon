@@ -105,6 +105,7 @@ type CreateAlertResponse struct {
 type AlertCreator interface {
 	CreateAlert(request CreateAlertRequest) (CreateAlertResponse, error)
 	ListAlerts() (AlertListResponse, error)
+	GetAlertByID(id uuid.UUID) (AlertListResponse, error)
 }
 
 type DatabaseAlertCreator struct {
@@ -135,7 +136,6 @@ type Alert struct {
 type AlertListResponse struct {
 	Alerts []Alert `json:"alerts"`
 	Total  int     `json:"total"`
-	// Future: Page int `json:"page"` for pagination
 }
 
 func (d *DatabaseAlertCreator) CreateAlert(request CreateAlertRequest) (CreateAlertResponse, error) {
@@ -288,6 +288,96 @@ func createAlertListHandler(alertCreator AlertCreator) gin.HandlerFunc { // Add 
 	}
 }
 
+func (d *DatabaseAlertCreator) GetAlertByID(id uuid.UUID) (AlertListResponse, error) {
+	query := `SELECT * FROM alerts_active where id=$1`
+
+	rows, err := d.db.Query(query, id.String())
+	if err != nil {
+		return AlertListResponse{}, fmt.Errorf("failed to query alerts: %w", err)
+	}
+
+	defer rows.Close()
+
+	var alerts []Alert
+
+	for rows.Next() {
+		var alert Alert
+		var labelsJSON []byte
+		var annotationsJSON []byte
+
+		err := rows.Scan(
+			&alert.ID,
+			&alert.AlertGroupID,
+			&alert.Source,
+			&alert.Severity,
+			&alert.Status,
+			&alert.Title,
+			&alert.Description,
+			&alert.Namespace,
+			&labelsJSON,
+			&annotationsJSON,
+			&alert.IncidentID,
+			&alert.JaegerTraceID,
+			&alert.CreatedAt,
+			&alert.AcknowledgedAt,
+			&alert.AcknowledgedBy,
+			&alert.UpdatedAt,
+			&alert.ResolvedAt,
+			&alert.AssignedTo,
+		)
+
+		if err != nil {
+			return AlertListResponse{}, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		if err := json.Unmarshal(labelsJSON, &alert.Labels); err != nil {
+			alert.Labels = make(map[string]interface{})
+		}
+
+		alerts = append(alerts, alert)
+	}
+
+	if err = rows.Err(); err != nil {
+		return AlertListResponse{}, fmt.Errorf("error during row iteration: %w", err)
+	}
+
+	return AlertListResponse{
+		Alerts: alerts,
+		Total:  len(alerts),
+	}, nil
+
+}
+
+func createAlertByIdHandler(alertCreator AlertCreator) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		// Step 1: Extract ID from URL path
+		idStr := ctx.Param("id")
+
+		// Step 2: Parse string to UUID
+		alertID, err := uuid.Parse(idStr)
+		if err != nil {
+			ctx.JSON(400, gin.H{"error": "Invalid alert ID format"})
+			return
+		}
+
+		// Step 3: Call GetAlertByID method
+		response, err := alertCreator.GetAlertByID(alertID)
+		if err != nil {
+			ctx.JSON(500, gin.H{"error": "Failed to get alert", "details": err.Error()})
+			return
+		}
+
+		// Step 4: Handle not found case
+		if len(response.Alerts) == 0 {
+			ctx.JSON(404, gin.H{"error": "Alert not found"})
+			return
+		}
+
+		// Step 5: Return single alert (not wrapped in array)
+		ctx.JSON(200, response.Alerts[0])
+	}
+}
+
 // HTTP Handler for database
 func healthHandler(checker DatabaseHealthChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -320,12 +410,14 @@ func main() {
 	checker := &PostgreSQLHealthChecker{db: dbPool}
 	alertSaver := &DatabaseAlertCreator{db: dbPool}
 	alertList := &DatabaseAlertCreator{db: dbPool}
+	alertByID := &DatabaseAlertCreator{db: dbPool}
 
 	// init Gin engine and add routing
 	router := gin.Default()
 	router.GET("/health/database", healthHandler(checker))
 	router.POST("/api/v1/alerts", createAlertHandler(alertSaver))
 	router.GET("/api/v1/alerts", createAlertListHandler(alertList))
+	router.GET("/api/v1/alerts/:id", createAlertByIdHandler(alertByID))
 
 	// Start HTTP server with port from yaml
 	fmt.Printf("Loaded config: Port=%d, DB=%s:%d\n", config.Http.Port, config.Db.Host, config.Db.Port)
