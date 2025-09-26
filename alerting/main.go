@@ -408,16 +408,14 @@ func main() {
 
 	// Checker
 	checker := &PostgreSQLHealthChecker{db: dbPool}
-	alertSaver := &DatabaseAlertCreator{db: dbPool}
-	alertList := &DatabaseAlertCreator{db: dbPool}
-	alertByID := &DatabaseAlertCreator{db: dbPool}
+	alertCreator := &DatabaseAlertCreator{db: dbPool}
 
 	// init Gin engine and add routing
 	router := gin.Default()
 	router.GET("/health/database", healthHandler(checker))
-	router.POST("/api/v1/alerts", createAlertHandler(alertSaver))
-	router.GET("/api/v1/alerts", createAlertListHandler(alertList))
-	router.GET("/api/v1/alerts/:id", createAlertByIdHandler(alertByID))
+	router.POST("/api/v1/alerts", createAlertHandler(alertCreator))
+	router.GET("/api/v1/alerts", createAlertListHandler(alertCreator))
+	router.GET("/api/v1/alerts/:id", createAlertByIdHandler(alertCreator))
 
 	// Start HTTP server with port from yaml
 	fmt.Printf("Loaded config: Port=%d, DB=%s:%d\n", config.Http.Port, config.Db.Host, config.Db.Port)
