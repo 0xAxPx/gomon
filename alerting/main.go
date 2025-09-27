@@ -102,13 +102,9 @@ type CreateAlertResponse struct {
 	CreatedAt    string
 }
 
-type UpdateAlertResponse struct {
-	ID             uuid.UUID `json:"id"`
-	AlertGroupID   uuid.UUID `json:"alert_group_id"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	AcknowledgedAt time.Time `json:"acknowledged_at"`
-	AcknowledgedBy string    `json:"acknowledged_by"`
+type AssignAlertRequest struct {
+	AssignedTo string `json:"assigned_to" binding:"required"`
+	Note       string `json:"note,omitempty"`
 }
 
 type AlertCreator interface {
@@ -116,6 +112,10 @@ type AlertCreator interface {
 	ListAlerts() (AlertListResponse, error)
 	GetAlertByID(id uuid.UUID) (AlertListResponse, error)
 	AcknowledgeAlert(id uuid.UUID) (*Alert, error)
+	ResolveAlert(id uuid.UUID) (*Alert, error)
+	AssignAlert(id uuid.UUID, assignedTo string) (*Alert, error)
+	DeleteAlert(id uuid.UUID) (*Alert, error)
+	GetAlertByStatusAndSeverity(status string, severity string) (AlertListResponse, error)
 }
 
 type DatabaseAlertCreator struct {
@@ -188,7 +188,6 @@ func (d *DatabaseAlertCreator) CreateAlert(request CreateAlertRequest) (CreateAl
 		Status:       "firing",
 		CreatedAt:    createdAt.Format(time.RFC3339),
 	}, nil
-
 }
 
 // HTTP Handler for alert
@@ -282,18 +281,33 @@ func (d *DatabaseAlertCreator) ListAlerts() (AlertListResponse, error) {
 		Alerts: alerts,
 		Total:  len(alerts),
 	}, nil
-
 }
 
-func createAlertListHandler(alertCreator AlertCreator) gin.HandlerFunc { // Add parameter
+func createAlertListHandler(alertCreator AlertCreator) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		response, err := alertCreator.ListAlerts() // Call method on interface
+		// 🔍 CHECK FOR QUERY PARAMETERS
+		status := ctx.Query("status")
+		severity := ctx.Query("severity")
+
+		// If both parameters exist, use filtered query
+		if status != "" && severity != "" {
+			fmt.Printf("🔍 Filtering: status=%s, severity=%s\n", status, severity)
+			response, err := alertCreator.GetAlertByStatusAndSeverity(status, severity)
+			if err != nil {
+				ctx.JSON(500, gin.H{"error": "Failed to get filtered alerts", "details": err.Error()})
+				return
+			}
+			ctx.JSON(200, response)
+			return
+		}
+
+		// Otherwise, return all alerts
+		fmt.Println("📋 Returning all alerts") // Debug log
+		response, err := alertCreator.ListAlerts()
 		if err != nil {
 			ctx.JSON(500, gin.H{"error": "Can't return data from db", "details": err.Error()})
 			return
 		}
-
-		// Don't forget to return the response!
 		ctx.JSON(200, response)
 	}
 }
@@ -355,7 +369,6 @@ func (d *DatabaseAlertCreator) GetAlertByID(id uuid.UUID) (AlertListResponse, er
 		Alerts: alerts,
 		Total:  len(alerts),
 	}, nil
-
 }
 
 func createAlertByIdHandler(alertCreator AlertCreator) gin.HandlerFunc {
@@ -402,7 +415,7 @@ func healthHandler(checker DatabaseHealthChecker) gin.HandlerFunc {
 
 func (d *DatabaseAlertCreator) AcknowledgeAlert(id uuid.UUID) (*Alert, error) {
 	acknowledgeAt := time.Now().UTC()
-	acknowledgeBy := "test_user"
+	acknowledgeBy := "system"
 	status := "acknowledged"
 
 	query := `
@@ -477,6 +490,306 @@ func acknowledgeAlertHandler(alertCreator AlertCreator) gin.HandlerFunc {
 	}
 }
 
+func (d *DatabaseAlertCreator) ResolveAlert(id uuid.UUID) (*Alert, error) {
+	query := `
+        UPDATE alerts_active 
+        SET status = 'resolved', 
+            resolved_at = NOW()
+        WHERE id = $1
+        RETURNING *`
+
+	row := d.db.QueryRow(query, id)
+
+	var alert Alert
+	var labelsJSON, annotationsJSON []byte
+
+	err := row.Scan(
+		&alert.ID,
+		&alert.AlertGroupID,
+		&alert.Source,
+		&alert.Severity,
+		&alert.Status,
+		&alert.Title,
+		&alert.Description,
+		&alert.Namespace,
+		&labelsJSON,
+		&annotationsJSON,
+		&alert.IncidentID,
+		&alert.JaegerTraceID,
+		&alert.CreatedAt,
+		&alert.AcknowledgedAt,
+		&alert.AcknowledgedBy,
+		&alert.UpdatedAt,
+		&alert.ResolvedAt,
+		&alert.AssignedTo,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("alert not found")
+		}
+		return nil, fmt.Errorf("failed to resolve alert: %w", err)
+	}
+
+	json.Unmarshal(labelsJSON, &alert.Labels)
+
+	return &alert, nil
+}
+
+func resolveAlertHandler(alertCreator AlertCreator) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+
+		// Step 1: Extract ID from URL path
+		idStr := ctx.Param("id")
+
+		// Step 2: Parse string to UUID
+		alertID, err := uuid.Parse(idStr)
+		if err != nil {
+			ctx.JSON(400, gin.H{"error": "Invalid alert ID format"})
+			return
+		}
+
+		// Step 3: Call ResolveAlert method
+		response, err := alertCreator.ResolveAlert(alertID)
+		if err != nil {
+			ctx.JSON(500, gin.H{"error": "Failed to resolve alert", "details": err.Error()})
+			return
+		}
+
+		ctx.JSON(200, response)
+
+	}
+}
+
+func (d *DatabaseAlertCreator) AssignAlert(id uuid.UUID, assignedTo string) (*Alert, error) {
+	query := `
+        UPDATE alerts_active 
+        SET assigned_to = $2
+        WHERE id = $1
+        RETURNING *`
+
+	row := d.db.QueryRow(query, id, assignedTo)
+
+	var alert Alert
+	var labelsJSON, annotationsJSON []byte
+
+	err := row.Scan(
+		&alert.ID,
+		&alert.AlertGroupID,
+		&alert.Source,
+		&alert.Severity,
+		&alert.Status,
+		&alert.Title,
+		&alert.Description,
+		&alert.Namespace,
+		&labelsJSON,
+		&annotationsJSON,
+		&alert.IncidentID,
+		&alert.JaegerTraceID,
+		&alert.CreatedAt,
+		&alert.AcknowledgedAt,
+		&alert.AcknowledgedBy,
+		&alert.UpdatedAt,
+		&alert.ResolvedAt,
+		&alert.AssignedTo,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("alert not found")
+		}
+		return nil, fmt.Errorf("failed to assign alert: %w", err)
+	}
+
+	json.Unmarshal(labelsJSON, &alert.Labels)
+
+	return &alert, nil
+}
+
+func assignAlertHandler(alertCreator AlertCreator) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+
+		// Step 1: Extract ID from URL path
+		idStr := ctx.Param("id")
+
+		// Step 2: Parse string to UUID
+		alertID, err := uuid.Parse(idStr)
+		if err != nil {
+			ctx.JSON(400, gin.H{"error": "Invalid alert ID format"})
+			return
+		}
+
+		// 2. Parse JSON body for assignment data
+		var request AssignAlertRequest
+		if err := ctx.ShouldBindJSON(&request); err != nil {
+			ctx.JSON(400, gin.H{"error": "Invalid JSON body"})
+			return
+		}
+
+		// 3. Call assignment method
+		response, err := alertCreator.AssignAlert(alertID, request.AssignedTo)
+		if err != nil {
+			ctx.JSON(500, gin.H{"error": "Failed to assign alert"})
+			return
+		}
+
+		ctx.JSON(200, response)
+
+	}
+}
+
+func (d *DatabaseAlertCreator) DeleteAlert(id uuid.UUID) (*Alert, error) {
+	query := `
+        DELETE FROM alerts_active 
+        WHERE id = $1
+        RETURNING *`
+
+	row := d.db.QueryRow(query, id)
+
+	var alert Alert
+	var labelsJSON, annotationsJSON []byte
+
+	err := row.Scan(
+		&alert.ID,
+		&alert.AlertGroupID,
+		&alert.Source,
+		&alert.Severity,
+		&alert.Status,
+		&alert.Title,
+		&alert.Description,
+		&alert.Namespace,
+		&labelsJSON,
+		&annotationsJSON,
+		&alert.IncidentID,
+		&alert.JaegerTraceID,
+		&alert.CreatedAt,
+		&alert.AcknowledgedAt,
+		&alert.AcknowledgedBy,
+		&alert.UpdatedAt,
+		&alert.ResolvedAt,
+		&alert.AssignedTo,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("alert not found")
+		}
+		return nil, fmt.Errorf("failed to assign alert: %w", err)
+	}
+
+	json.Unmarshal(labelsJSON, &alert.Labels)
+
+	return &alert, nil
+}
+
+func (d *DatabaseAlertCreator) GetAlertByStatusAndSeverity(status string, severity string) (AlertListResponse, error) {
+	query := `SELECT * FROM alerts_active WHERE status=$1 AND severity=$2`
+
+	rows, err := d.db.Query(query, status, severity)
+	if err != nil {
+		return AlertListResponse{}, fmt.Errorf("failed to query alerts: %w", err)
+	}
+
+	defer rows.Close()
+
+	var alerts []Alert
+
+	for rows.Next() {
+		var alert Alert
+		var labelsJSON []byte
+		var annotationsJSON []byte
+
+		err := rows.Scan(
+			&alert.ID,
+			&alert.AlertGroupID,
+			&alert.Source,
+			&alert.Severity,
+			&alert.Status,
+			&alert.Title,
+			&alert.Description,
+			&alert.Namespace,
+			&labelsJSON,
+			&annotationsJSON,
+			&alert.IncidentID,
+			&alert.JaegerTraceID,
+			&alert.CreatedAt,
+			&alert.AcknowledgedAt,
+			&alert.AcknowledgedBy,
+			&alert.UpdatedAt,
+			&alert.ResolvedAt,
+			&alert.AssignedTo,
+		)
+
+		if err != nil {
+			return AlertListResponse{}, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		if err := json.Unmarshal(labelsJSON, &alert.Labels); err != nil {
+			alert.Labels = make(map[string]interface{})
+		}
+
+		alerts = append(alerts, alert)
+	}
+
+	if err = rows.Err(); err != nil {
+		return AlertListResponse{}, fmt.Errorf("error during row iteration: %w", err)
+	}
+
+	return AlertListResponse{
+		Alerts: alerts,
+		Total:  len(alerts),
+	}, nil
+}
+
+func getAlertsByStatusAndSeverityHandler(alertCreator AlertCreator) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		// Step 1: Extract ID from URL path
+		Status := ctx.Param("status")
+		Severity := ctx.Param("severity")
+
+		// Step 2: Call GetAlertByID method
+		response, err := alertCreator.GetAlertByStatusAndSeverity(Status, Severity)
+		if err != nil {
+			ctx.JSON(500, gin.H{"error": "Failed to get alert by status and severity", "details": err.Error()})
+			return
+		}
+
+		// Step 3: Handle not found case
+		if len(response.Alerts) == 0 {
+			ctx.JSON(404, gin.H{"error": "Alert not found"})
+			return
+		}
+
+		// Step 4: Return alerts
+		ctx.JSON(200, response.Alerts)
+	}
+}
+
+func deleteAlertHandler(alertCreator AlertCreator) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+
+		// Step 1: Extract ID from URL path
+		idStr := ctx.Param("id")
+
+		// Step 2: Parse string to UUID
+		alertID, err := uuid.Parse(idStr)
+		if err != nil {
+			ctx.JSON(400, gin.H{"error": "Invalid alert ID format"})
+			return
+		}
+
+		// Step 3: Call DeleteAlert method
+		response, err := alertCreator.DeleteAlert(alertID)
+		if err != nil {
+			ctx.JSON(500, gin.H{"error": "Failed to delete alert", "details": err.Error()})
+			return
+		}
+
+		ctx.JSON(200, response)
+
+	}
+}
+
 // main
 func main() {
 	// Construct config
@@ -505,6 +818,9 @@ func main() {
 	router.GET(api, createAlertListHandler(alertCreator))
 	router.GET(api+"/:id", createAlertByIdHandler(alertCreator))
 	router.PUT(api+"/:id/acknowledge", acknowledgeAlertHandler(alertCreator))
+	router.PUT(api+"/:id/resolve", resolveAlertHandler(alertCreator))
+	router.PUT(api+"/:id/assign", assignAlertHandler(alertCreator))
+	router.DELETE(api+"/:id", deleteAlertHandler(alertCreator))
 
 	// Start HTTP server with port from yaml
 	fmt.Printf("Loaded config: Port=%d, DB=%s:%d\n", config.Http.Port, config.Db.Host, config.Db.Port)
