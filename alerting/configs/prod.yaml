@@ -1,0 +1,8 @@
+http: 
+  port: 8099
+db:
+  host: localhost
+  port: 5433
+  database: alerting 
+  user: alerting_service
+  password: alerting_secure_password123
