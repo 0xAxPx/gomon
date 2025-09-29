@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: alerting
+  namespace: monitoring
+  labels:
+    app: alerting
+spec:
+  type: ClusterIP
+  selector:
+    app: alerting
+  ports:
+  - port: 8099
+    targetPort: 8099
+    protocol: TCP
+    name: http

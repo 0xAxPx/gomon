@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alerting
+  namespace: monitoring
+  labels:
+    app: alerting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alerting
+  template:
+    metadata:
+      labels:
+        app: alerting
+    spec:
+      containers:
+      - name: alerting
+        image: ragazzo271985/alerting-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8099
+          name: http
+        env:
+        - name: CONFIG_PATH
+          value: /app/configs/prod.yaml
+        - name: GIN_MODE
+          value: release
+        volumeMounts:
+        - name: config
+          mountPath: /app/configs
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 200m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /health/database
+            port: 8099
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health/database
+            port: 8099
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: config
+        configMap:
+          name: alerting-config
