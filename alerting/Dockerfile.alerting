@@ -1,0 +1,57 @@
+# Stage 1: Build
+FROM golang:1.25.1-alpine AS builder
+WORKDIR /app
+
+# Copy go.mod and go.sum from ROOT of monorepo
+COPY go.mod go.sum ./
+
+# Download dependencies (cached if go.mod/go.sum unchanged)
+RUN go mod download
+
+# Copy ONLY the alerting service source code
+COPY alerting/ ./alerting/
+
+# Build the binary from the alerting subdirectory
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w" \
+    -o alerter ./alerting/cmd/alerter/main.go
+
+# Stage 2: Runtime
+FROM alpine:3.21
+
+# Install CA certificates for HTTPS
+RUN apk --no-cache add ca-certificates
+
+# Create non-root user
+RUN addgroup -g 1000 alerting && \
+    adduser -D -u 1000 -G alerting alerting
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/alerter .
+
+# Copy configs from alerting subdirectory
+COPY alerting/configs ./configs
+
+# Set ownership
+RUN chown -R alerting:alerting /app
+
+# Switch to non-root user
+USER alerting
+
+# Environment variables
+ENV CONFIG_PATH=/app/configs/prod.yaml
+ENV GIN_MODE=release
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8099/health/database || exit 1
+
+# Expose port
+EXPOSE 8099
+
+# Run the binary
+CMD ["./alerter"]

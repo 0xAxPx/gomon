@@ -107,11 +107,11 @@ resource "kubernetes_deployment" "victoria_metrics" {
           resources {
             requests = {
               cpu    = "500m"
-              memory = "1Gi"
+              memory = "256Mi"
             }
             limits = {
               cpu    = "1000m"
-              memory = "2Gi"
+              memory = "256Mi"
             }
           }
         }
@@ -413,6 +413,25 @@ resource "kubernetes_ingress_v1" "monitoring_ingress" {
           }
         }
       }
+    }
+    rule {
+      host = "alerting.local"
+
+      http {
+        path {
+          path = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "alerting"
+              port {
+                number = 8099
+              }
+            }
+          }
+        }
+      }
     }  
   }
 }
@@ -596,11 +615,11 @@ resource "kubernetes_deployment" "elasticsearch_lb" {
           resources {
             requests = {
               cpu = "100m"
-              memory = "128Mi"
+              memory = "64Mi"
             }
             limits = {
               cpu = "300m"
-              memory = "256Mi"
+              memory = "64Mi"
             }
           }
 
@@ -729,14 +748,14 @@ resource "kubernetes_service" "elasticsearch_lb_external" {
     port {
       port        = 9200
       target_port = 9200
-      node_port = 30920
+      node_port   = 30920
       name        = "elasticsearch"
     }
     
     port {
       port        = 8080
       target_port = 8080
-      node_port = 30921
+      node_port   = 30921
       name        = "health"
     }
   }
@@ -821,11 +840,11 @@ resource "kubernetes_deployment" "jaeger" {
           resources {
             requests = {
               cpu    = "100m"
-              memory = "256Mi"
+              memory = "128Mi"
             }
             limits = {
               cpu    = "500m"
-              memory = "512Mi"
+              memory = "128Mi"
             }
           }
 
