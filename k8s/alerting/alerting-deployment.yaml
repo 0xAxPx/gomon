@@ -15,6 +15,7 @@ spec:
       labels:
         app: alerting
     spec:
+      serviceAccountName: alerting
       containers:
       - name: alerting
         image: ragazzo271985/alerting-service:latest
