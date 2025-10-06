@@ -1,4 +1,4 @@
-name: Update Agent Deployment YAML
+name: Update Alerting Service Deployment YAML
 
 on:
   repository_dispatch:
