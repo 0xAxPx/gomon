@@ -1,0 +1,29 @@
+name: Update Agent Deployment YAML
+
+on:
+  repository_dispatch:
+    types: [update-alerting-yaml]
+
+permissions:
+  contents: write
+
+jobs:
+  update-deployment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Update alerting-deployment.yaml image tag
+        run: |
+          TAG="${{ github.event.client_payload.tag }}"
+          sed -i "s|image: .*alerting-service:.*|image: ragazzo271985/alerting-service:$TAG|g" k8s/alerting/alerting-deployment.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "Alexander Peshkov"
+          git config user.email "alexander.peshkov27@gmail.com"
+          git add k8s/alerting/alerting-deployment.yaml
+          git commit -m "Update alering service image to $TAG"
+          git push

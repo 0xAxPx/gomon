@@ -7,11 +7,21 @@ import (
 	"gomon/alerting/internal/config"
 	"gomon/alerting/internal/database"
 	"gomon/alerting/internal/handlers"
+	"gomon/alerting/internal/k8s"
 	"gomon/alerting/internal/repository"
 	"gomon/alerting/internal/server"
 )
 
 func main() {
+
+	k8sClient, err := k8s.NewClient()
+	if err != nil {
+		log.Printf("Warning: Could not initialize K8s client: %v", err)
+		log.Println("Continuing without K8s monitoring...")
+	} else {
+		log.Println("Successfully connected to Kubernetes API %s", k8sClient)
+	}
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
