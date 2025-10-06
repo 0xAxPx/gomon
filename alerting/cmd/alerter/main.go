@@ -13,7 +13,6 @@ import (
 )
 
 func main() {
-
 	k8sClient, err := k8s.NewClient()
 	if err != nil {
 		log.Printf("Warning: Could not initialize K8s client: %v", err)
