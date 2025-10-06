@@ -1,4 +1,4 @@
-name: Build and Push Docker Image Agent
+name: Build and Push Docker Image Alerting Service
 
 on:
   push:
@@ -33,12 +33,12 @@ jobs:
             --push \
             -t ${{ secrets.DOCKER_HUB_NAME }}/alerting-service:latest \
             -t ${{ secrets.DOCKER_HUB_NAME }}/alerting-service:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
-            -f Dockerfile.alerting .
+            -f alerting/Dockerfile.alerting .
       
       - name: Trigger update of k8s deployment YAML
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
-          event-type: update-agent-yaml
+          event-type: update-alerting-yaml
           client-payload: '{"tag": "${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}"}'
 
