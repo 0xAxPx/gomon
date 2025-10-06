@@ -1,11 +1,12 @@
-name: Build and Push Docker Image Alerting Service
+name: Build and Push Docker Image Alerting
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'alerting/**'
-      - 'Dockerfile.alerting'
+      - 'go.mod'
+      - 'go.sum'
 
 jobs:
   build:
@@ -41,4 +42,3 @@ jobs:
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
           event-type: update-alerting-yaml
           client-payload: '{"tag": "${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }}"}'
-
