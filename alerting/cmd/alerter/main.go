@@ -19,7 +19,13 @@ func main() {
 		log.Printf("Warning: Could not initialize K8s client: %v", err)
 		log.Println("Continuing without K8s monitoring...")
 	} else {
-		log.Println("Successfully connected to Kubernetes API %s", k8sClient)
+		log.Println("Successfully connected to Kubernetes API")
+		if k8sClient != nil {
+			log.Println("Getting PODs restart statistics for namespaces: monitoring, kube-system, ingress-nginx")
+			k8s.ListPods(k8sClient, "monitoring")
+			k8s.ListPods(k8sClient, "kube-system")
+			k8s.ListPods(k8sClient, "ingress-nginx")
+		}
 	}
 
 	// Load configuration
