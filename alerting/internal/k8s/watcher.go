@@ -48,6 +48,8 @@ func watchLoop(clientSet *kubernetes.Clientset, namespace string) error {
 		handleEvent(event, namespace)
 	}
 
+	return err
+
 }
 
 func handleEvent(event watch.Event, namespace string) {
