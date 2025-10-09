@@ -25,9 +25,6 @@ func main() {
 			k8s.ListPods(k8sClient, "monitoring")
 			k8s.ListPods(k8sClient, "kube-system")
 			k8s.ListPods(k8sClient, "ingress-nginx")
-
-			log.Println("Init watchers...")
-			k8s.StartWatching(k8sClient)
 		}
 	}
 
@@ -50,6 +47,9 @@ func main() {
 	// Initialize repositories
 	alertRepo := repository.NewPostgresAlertRepository(db)
 	healthChecker := repository.NewPostgresHealthChecker(db)
+
+	log.Println("Init watchers...")
+	k8s.StartWatching(k8sClient, alertRepo)
 
 	// Initialize handlers
 	alertHandler := handlers.NewAlertHandler(alertRepo)
