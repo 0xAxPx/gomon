@@ -25,6 +25,9 @@ func main() {
 			k8s.ListPods(k8sClient, "monitoring")
 			k8s.ListPods(k8sClient, "kube-system")
 			k8s.ListPods(k8sClient, "ingress-nginx")
+
+			log.Println("Init watchers...")
+			k8s.StartWatching(k8sClient)
 		}
 	}
 
