@@ -87,7 +87,7 @@ func (r *PostgresAlertRepository) GetByID(id uuid.UUID) (*models.Alert, error) {
 	alert, err := scanAlert(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("alert not found")
+			return nil, fmt.Errorf("alert not found %w", id)
 		}
 		return nil, fmt.Errorf("failed to get alert: %w", err)
 	}
@@ -96,8 +96,9 @@ func (r *PostgresAlertRepository) GetByID(id uuid.UUID) (*models.Alert, error) {
 }
 
 func (r *PostgresAlertRepository) FindActiveAlertByPod(namespace string, podName string) (*models.Alert, error) {
+	fmt.Println("Searching for alert for %s pod and %s namespace", podName, namespace)
 	query := `SELECT * 
-FROM alerting.alerts_active
+FROM alerts_active
 WHERE source = 'kubernetes'
   AND namespace = $1
   AND labels->>'pod_name' = $2
@@ -118,6 +119,7 @@ LIMIT 1 `
 }
 
 func (r *PostgresAlertRepository) GetByStatusAndSeverity(status, severity string) (models.AlertListResponse, error) {
+	fmt.Println("Get status for alert with %s status and %s severity", status, severity)
 	query := `SELECT * FROM alerts_active WHERE status=$1 AND severity=$2`
 
 	rows, err := r.db.Query(query, status, severity)
@@ -138,6 +140,8 @@ func (r *PostgresAlertRepository) GetByStatusAndSeverity(status, severity string
 }
 
 func (r *PostgresAlertRepository) Acknowledge(id uuid.UUID) (*models.Alert, error) {
+	fmt.Println("Acknowledge alert with %w", id)
+
 	query := `
 		UPDATE alerts_active 
 		SET status = 'acknowledged', 
@@ -152,6 +156,7 @@ func (r *PostgresAlertRepository) Acknowledge(id uuid.UUID) (*models.Alert, erro
 }
 
 func (r *PostgresAlertRepository) Resolve(id uuid.UUID) (*models.Alert, error) {
+	fmt.Println("Resolve alert with %w", id)
 	query := `
 		UPDATE alerts_active 
 		SET status = 'resolved', 
@@ -165,6 +170,8 @@ func (r *PostgresAlertRepository) Resolve(id uuid.UUID) (*models.Alert, error) {
 }
 
 func (r *PostgresAlertRepository) Assign(id uuid.UUID, assignedTo string) (*models.Alert, error) {
+	fmt.Println("Assign alert with %w and assignt to %s", id, assignedTo)
+
 	query := `
 		UPDATE alerts_active 
 		SET assigned_to = $2,
@@ -177,6 +184,8 @@ func (r *PostgresAlertRepository) Assign(id uuid.UUID, assignedTo string) (*mode
 }
 
 func (r *PostgresAlertRepository) Delete(id uuid.UUID) (*models.Alert, error) {
+	fmt.Println("Delete alert with %w", id)
+
 	query := `DELETE FROM alerts_active WHERE id = $1 RETURNING *`
 
 	row := r.db.QueryRow(query, id)
