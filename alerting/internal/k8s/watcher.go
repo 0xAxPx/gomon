@@ -121,13 +121,19 @@ func getPodRestarts(pod *v1.Pod) int32 {
 }
 
 func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository) {
+	labels := make(map[string]string)
+	for k, v := range pod.Labels {
+		labels[k] = v
+	}
+	labels["pod_name"] = pod.Name
+
 	request := models.CreateAlertRequest{
 		Source:      "kubernetes",
 		Severity:    getSeverity(pod),
 		Title:       buildTitle(pod),
 		Description: buildDescription(pod),
 		Namespace:   pod.Namespace,
-		Labels:      pod.Labels,
+		Labels:      labels,
 		TraceID:     "",
 	}
 
