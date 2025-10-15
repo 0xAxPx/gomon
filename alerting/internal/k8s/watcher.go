@@ -71,10 +71,22 @@ func handleEvent(event watch.Event, namespace string, alertRepo *repository.Post
 		log.Printf("[%s] Pod MODIFIED: %s (Phase=%s, Restarts=%d)",
 			namespace, pod.Name, pod.Status.Phase, getPodRestarts(pod))
 
-		// Check if we should create alert
-		if shouldAlert(pod, namespace) {
-			createAlert(pod, alertRepo)
+		existingAlert, err := alertRepo.FindActiveAlertByPod(namespace, pod.Name)
+		if err != nil {
+			log.Printf("Error checking for existing alert: %v", err)
+			return
 		}
+
+		if existingAlert != nil {
+			// Alert exists - handle it
+			handleExistingAlert(pod, existingAlert, alertRepo)
+		} else {
+			// No alert - check if should create
+			if shouldAlert(pod, namespace) {
+				createAlert(pod, alertRepo)
+			}
+		}
+
 	case watch.Deleted:
 		log.Printf("[%s] Pod DELETED: %s", namespace, pod.Name)
 	}
@@ -165,4 +177,24 @@ func buildDescription(pod *v1.Pod) string {
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.PostgresAlertRepository) {
+	// Check if pod is healthy now
+	if isHealthy(pod) {
+		// Resolve the alert
+		resolvedAlert, err := repo.Resolve(alert.ID)
+		if err != nil {
+			log.Printf("❌ Failed to resolve alert: %v", err)
+			return
+		}
+		log.Printf("✅ Alert RESOLVED: %s (ID: %s)", pod.Name, resolvedAlert.ID)
+	} else {
+		// Still unhealthy, do nothing
+		log.Printf("⏳ Pod %s still unhealthy, alert remains open", pod.Name)
+	}
+}
+
+func isHealthy(pod *v1.Pod) bool {
+	return pod.Status.Phase == v1.PodRunning
 }

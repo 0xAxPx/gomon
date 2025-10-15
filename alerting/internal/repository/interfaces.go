@@ -16,6 +16,7 @@ type AlertRepository interface {
 	Resolve(id uuid.UUID) (*models.Alert, error)
 	Assign(id uuid.UUID, assignedTo string) (*models.Alert, error)
 	Delete(id uuid.UUID) (*models.Alert, error)
+	FindActiveAlertByPod(namespace, podName string) (*models.Alert, error)
 }
 
 // HealthChecker defines health check operations

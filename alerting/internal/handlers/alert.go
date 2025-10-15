@@ -86,6 +86,24 @@ func (h *AlertHandler) GetByID(ctx *gin.Context) {
 	ctx.JSON(200, alert)
 }
 
+func (h *AlertHandler) FindActiveAlertByPod(ctx *gin.Context) {
+	namespace := ctx.Param("namespace")
+	podName := ctx.Param("podname")
+
+	alert, err := h.repo.FindActiveAlertByPod(namespace, podName)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			ctx.JSON(404, gin.H{"error": "Alert not found"})
+			return
+		}
+		ctx.JSON(500, gin.H{"error": "Failed to get alert", "details": err.Error()})
+		return
+	}
+
+	ctx.JSON(200, alert)
+
+}
+
 func (h *AlertHandler) Acknowledge(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	alertID, err := uuid.Parse(idStr)
