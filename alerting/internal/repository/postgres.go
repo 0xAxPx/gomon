@@ -95,6 +95,28 @@ func (r *PostgresAlertRepository) GetByID(id uuid.UUID) (*models.Alert, error) {
 	return alert, nil
 }
 
+func (r *PostgresAlertRepository) FindActiveAlertByPod(namespace string, podName string) (*models.Alert, error) {
+	query := `SELECT * 
+FROM alerting.alerts_active
+WHERE source = 'kubernetes'
+  AND namespace = $1
+  AND labels->>'pod_name' = $2
+  AND status = 'firing'
+ORDER BY created_at DESC
+LIMIT 1 `
+
+	row := r.db.QueryRow(query, namespace, podName)
+	alert, err := scanAlert(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get alert: %w", err)
+	}
+
+	return alert, nil
+}
+
 func (r *PostgresAlertRepository) GetByStatusAndSeverity(status, severity string) (models.AlertListResponse, error) {
 	query := `SELECT * FROM alerts_active WHERE status=$1 AND severity=$2`
 
