@@ -2,7 +2,7 @@ package k8s
 
 import (
 	"context"
-	"fmt"
+	"log"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,14 +16,14 @@ func ListPods(clientSet *kubernetes.Clientset, namespace string) {
 	)
 
 	if errors != nil {
-		fmt.Printf("Error listing pods: %v\n", errors)
+		log.Printf("Error listing pods: %v", errors)
 		return
 	}
 
-	fmt.Printf("\nFound %d pods in namespace '%s':\n", len(pods.Items), namespace)
+	log.Printf("Found %d pods in namespace '%s':", len(pods.Items), namespace)
 
 	for _, pod := range pods.Items {
-		fmt.Printf("- %s: Phase=%s, Restarts=%d\n",
+		log.Printf("- %s: Phase=%s, Restarts=%d",
 			pod.Name,
 			pod.Status.Phase,
 			getPodRestartCount(pod),
