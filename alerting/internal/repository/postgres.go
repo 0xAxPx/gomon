@@ -157,7 +157,7 @@ func (r *PostgresAlertRepository) Acknowledge(id uuid.UUID) (*models.Alert, erro
 }
 
 func (r *PostgresAlertRepository) Resolve(id uuid.UUID) (*models.Alert, error) {
-	log.Printf("Resolve alert with %w", id)
+	log.Printf("Resolve alert with %s", id)
 	query := `
 		UPDATE alerts_active 
 		SET status = 'resolved', 
