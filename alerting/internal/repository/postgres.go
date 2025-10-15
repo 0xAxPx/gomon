@@ -221,15 +221,11 @@ func scanAlert(row interface {
 		&alert.AssignedTo,
 	)
 
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("alert not found")
-		}
-		return nil, fmt.Errorf("failed to scan alert: %w", err)
+	if err == sql.ErrNoRows {
+		return nil, nil // ← Not found is OK
 	}
-
-	if err := json.Unmarshal(labelsJSON, &alert.Labels); err != nil {
-		alert.Labels = make(map[string]interface{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan alert: %w", err)
 	}
 
 	return &alert, nil
