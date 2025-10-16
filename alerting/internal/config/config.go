@@ -8,8 +8,9 @@ import (
 )
 
 type Config struct {
-	Http HttpConfig `yaml:"http"`
-	Db   DbConfig   `yaml:"db"`
+	Http  HttpConfig  `yaml:"http"`
+	Db    DbConfig    `yaml:"db"`
+	Slack SlackConfig `yaml:"slack"`
 }
 
 type HttpConfig struct {
@@ -22,6 +23,11 @@ type DbConfig struct {
 	Database string `yaml:"database"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
+}
+
+type SlackConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	ChannelName string `yaml:"channel"`
 }
 
 func Load() (Config, error) {
@@ -48,4 +54,8 @@ func Load() (Config, error) {
 	}
 
 	return config, nil
+}
+
+func GetSlackToken() string {
+	return os.Getenv("SLACK_BOT_TOKEN")
 }

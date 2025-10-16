@@ -10,6 +10,7 @@ import (
 	"gomon/alerting/internal/k8s"
 	"gomon/alerting/internal/repository"
 	"gomon/alerting/internal/server"
+	"gomon/alerting/internal/slack"
 )
 
 func main() {
@@ -44,12 +45,30 @@ func main() {
 	fmt.Printf("Connected to database: %s:%d/%s\n",
 		cfg.Db.Host, cfg.Db.Port, cfg.Db.Database)
 
+	// Initialize slack connection
+	var slackClient *slack.Client
+	if cfg.Slack.Enabled {
+		slackClient, err = slack.NewSlackClient(cfg.Slack) // No := !
+		if err != nil {
+			log.Printf("⚠️  Could not initialize Slack: %v", err)
+			log.Println("Continuing without Slack notifications...")
+		} else {
+			log.Println("✅ Slack client initialized")
+			// Send test message
+			if err := slackClient.SendMessage("🚀 Alerting service started"); err != nil {
+				log.Printf("⚠️  Failed to send test message: %v", err)
+			}
+		}
+	} else {
+		log.Println("ℹ️  Slack notifications disabled in config")
+	}
+
 	// Initialize repositories
 	alertRepo := repository.NewPostgresAlertRepository(db)
 	healthChecker := repository.NewPostgresHealthChecker(db)
 
 	log.Println("Init watchers...")
-	k8s.StartWatching(k8sClient, alertRepo)
+	k8s.StartWatching(k8sClient, alertRepo, slackClient)
 
 	// Initialize handlers
 	alertHandler := handlers.NewAlertHandler(alertRepo)
