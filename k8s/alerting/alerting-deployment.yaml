@@ -32,7 +32,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: slack-bot-token
-              value: token   
+              key: token   
         volumeMounts:
         - name: config
           mountPath: /app/configs
