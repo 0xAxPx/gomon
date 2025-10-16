@@ -28,6 +28,11 @@ spec:
           value: /app/configs/prod.yaml
         - name: GIN_MODE
           value: release
+        - name: SLACK_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: slack-bot-token
+              value: token   
         volumeMounts:
         - name: config
           mountPath: /app/configs

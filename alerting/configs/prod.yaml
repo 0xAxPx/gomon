@@ -6,3 +6,6 @@ db:
   database: alerting 
   user: alerting_service
   password: alerting_secure_password123
+slack:
+  enabled: true
+  channel: "all-gomon-monitoring"

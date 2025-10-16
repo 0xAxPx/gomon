@@ -14,9 +14,10 @@ import (
 
 	"gomon/alerting/internal/models"
 	"gomon/alerting/internal/repository"
+	"gomon/alerting/internal/slack"
 )
 
-func StartWatching(clientSet *kubernetes.Clientset, alertRepo *repository.PostgresAlertRepository) {
+func StartWatching(clientSet *kubernetes.Clientset, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) {
 	namespaces := []string{"monitoring", "kube-system", "ingress-nginx"}
 
 	for _, ns := range namespaces {
