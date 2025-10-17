@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -22,15 +23,15 @@ func StartWatching(clientSet *kubernetes.Clientset, alertRepo *repository.Postgr
 
 	for _, ns := range namespaces {
 		// Run each watcher concurrently
-		go watchNamespace(clientSet, ns, alertRepo)
+		go watchNamespace(clientSet, ns, alertRepo, slackClient)
 	}
 }
 
-func watchNamespace(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository) {
+func watchNamespace(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository, slackCient *slack.Client) {
 	log.Printf("Starting watcher for namespace: %s", namespace)
 
 	for {
-		if err := watchLoop(clientSet, namespace, alertRepo); err != nil {
+		if err := watchLoop(clientSet, namespace, alertRepo, slackCient); err != nil {
 			log.Printf("Watch error in %s: %v. Reconnecting in 10s...", namespace, err)
 			time.Sleep(10 * time.Second)
 		}
@@ -38,7 +39,7 @@ func watchNamespace(clientSet *kubernetes.Clientset, namespace string, alertRepo
 
 }
 
-func watchLoop(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository) error {
+func watchLoop(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) error {
 
 	watcher, err := clientSet.CoreV1().Pods(namespace).Watch(
 		context.Background(),
@@ -51,13 +52,13 @@ func watchLoop(clientSet *kubernetes.Clientset, namespace string, alertRepo *rep
 	defer watcher.Stop()
 
 	for event := range watcher.ResultChan() {
-		handleEvent(event, namespace, alertRepo)
+		handleEvent(event, namespace, alertRepo, slackClient)
 	}
 
 	return nil
 }
 
-func handleEvent(event watch.Event, namespace string, alertRepo *repository.PostgresAlertRepository) {
+func handleEvent(event watch.Event, namespace string, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) {
 	pod, ok := event.Object.(*v1.Pod)
 	if !ok {
 		return
@@ -84,7 +85,7 @@ func handleEvent(event watch.Event, namespace string, alertRepo *repository.Post
 		} else {
 			// No alert - check if should create
 			if shouldAlert(pod, namespace) {
-				createAlert(pod, alertRepo)
+				createAlert(pod, alertRepo, slackClient)
 			}
 		}
 
@@ -121,23 +122,27 @@ func getPodRestarts(pod *v1.Pod) int32 {
 	return restarts
 }
 
-func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository) {
+func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) {
 	labels := make(map[string]string)
 	for k, v := range pod.Labels {
 		labels[k] = v
 	}
 	labels["pod_name"] = pod.Name
+	labels["node_name"] = pod.Spec.NodeName
+
+	severity := getSeverity(pod)
 
 	request := models.CreateAlertRequest{
 		Source:      "kubernetes",
-		Severity:    getSeverity(pod),
+		Severity:    severity,
 		Title:       buildTitle(pod),
 		Description: buildDescription(pod),
 		Namespace:   pod.Namespace,
 		Labels:      labels,
-		TraceID:     "",
+		TraceID:     generateTraceID(),
 	}
 
+	// Save to database
 	response, err := alertRepo.Create(request)
 	if err != nil {
 		log.Printf("❌ Failed to create alert for pod %s: %v", pod.Name, err)
@@ -145,6 +150,48 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository) {
 	}
 
 	log.Printf("🚨 ALERT CREATED: %s (ID: %s)", pod.Name, response.ID)
+
+	channels := slackClient.GetChannels()
+
+	if shouldNotifySlack(severity) && slackClient != nil {
+		err := notifySlack(slackClient, request, response, severity, getChannelForSeverity(severity, channels))
+		if err != nil {
+			log.Printf("⚠️ Slack notification failed for alert %s: %v", response.ID, err)
+		}
+	}
+
+}
+
+func shouldNotifySlack(severity string) bool {
+	// Configure which severities trigger Slack
+	return severity == "P0" || severity == "P1" || severity == "P2s"
+}
+
+func notifySlack(client *slack.Client, request models.CreateAlertRequest, response models.CreateAlertResponse, severity string, channelName string) error {
+	// Build message with full details
+	message := fmt.Sprintf(
+		"🚨 *%s Alert Created*\n"+
+			"*ID:* %s\n"+
+			"*Title:* %s\n"+
+			"*Namespace:* %s\n"+
+			"*Description:* %s\n"+
+			"*Status:* %s\n"+
+			"*Created:* %s",
+		severity,
+		response.ID,
+		request.Title,       // From request
+		request.Namespace,   // From request
+		request.Description, // From request
+		response.Status,     // From response
+		response.CreatedAt,  // From response
+	)
+
+	return client.SendMessageToChannel(message, channelName)
+}
+
+func generateTraceID() string {
+	// Generate unique trace ID for correlation
+	return uuid.New().String()
 }
 
 func getSeverity(pod *v1.Pod) string {
@@ -156,6 +203,20 @@ func getSeverity(pod *v1.Pod) string {
 	} else {
 		return "P3"
 	}
+}
+
+func getChannelForSeverity(severity string, channels map[string]string) string {
+	switch severity {
+	case "P0", "P1":
+		if ch, ok := channels["critical"]; ok {
+			return ch
+		}
+	case "P2", "P3":
+		if ch, ok := channels["default"]; ok {
+			return ch
+		}
+	}
+	return channels["default"] // Fallback
 }
 
 func buildTitle(pod *v1.Pod) string {
