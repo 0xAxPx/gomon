@@ -48,7 +48,7 @@ func main() {
 	// Initialize slack connection
 	var slackClient *slack.Client
 	if cfg.Slack.Enabled {
-		slackClient, err = slack.NewSlackClient(cfg.Slack) // No := !
+		slackClient, err = slack.NewSlackClient(cfg.Slack)
 		if err != nil {
 			log.Printf("⚠️  Could not initialize Slack: %v", err)
 			log.Println("Continuing without Slack notifications...")

@@ -50,3 +50,19 @@ func (c *Client) SendMessage(text string) error {
 	log.Printf("📤 Sent message to Slack channel %s", c.channels["default"])
 	return nil
 }
+
+func (c *Client) SendMessageToChannel(text string, channelName string) error {
+	_, _, err := c.client.PostMessage(channelName,
+		slack.MsgOptionText(text, false),
+	)
+	if err != nil {
+		log.Printf("ERROR: Could not send message to %s: %w", channelName, err)
+	}
+
+	log.Printf("📤 Sent message to Slack channel %s", channelName)
+	return nil
+}
+
+func (c *Client) GetChannels() map[string]string {
+	return c.channels
+}
