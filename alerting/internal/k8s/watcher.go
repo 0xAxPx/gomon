@@ -81,7 +81,7 @@ func handleEvent(event watch.Event, namespace string, alertRepo *repository.Post
 
 		if existingAlert != nil {
 			// Alert exists - handle it
-			handleExistingAlert(pod, existingAlert, alertRepo)
+			handleExistingAlert(pod, existingAlert, alertRepo, slackClient)
 		} else {
 			// No alert - check if should create
 			if shouldAlert(pod, namespace) {
@@ -154,10 +154,14 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 	channels := slackClient.GetChannels()
 
 	if shouldNotifySlack(severity) && slackClient != nil {
-		err := notifySlack(slackClient, request, response, severity, getChannelForSeverity(severity, channels))
+		channel := getChannelForSeverity(severity, channels)
+		log.Printf("Send alert into %s channel, severity: %s", channel, severity)
+		err := notifySlack(slackClient, request, response, severity, channel)
 		if err != nil {
 			log.Printf("⚠️ Slack notification failed for alert %s: %v", response.ID, err)
 		}
+	} else {
+		log.Printf("Nothing to send into slack [shouldNotifySlack: %w]", shouldNotifySlack(severity))
 	}
 
 }
@@ -189,6 +193,28 @@ func notifySlack(client *slack.Client, request models.CreateAlertRequest, respon
 	return client.SendMessageToChannel(message, channelName)
 }
 
+func notifySlackWithResolving(client *slack.Client, alert *models.Alert, severity string, channelName string) error {
+	// Build message with full details
+	message := fmt.Sprintf(
+		"🚨 *%s Alert Resolved*\n"+
+			"*ID:* %s\n"+
+			"*Title:* %s\n"+
+			"*Namespace:* %s\n"+
+			"*Description:* %s\n"+
+			"*Status:* %s\n"+
+			"*Resolved at:* %s",
+		severity,
+		alert.ID,
+		alert.Title,
+		alert.Namespace,
+		alert.Description,
+		alert.Status,
+		alert.ResolvedAt,
+	)
+
+	return client.SendMessageToChannel(message, channelName)
+}
+
 func generateTraceID() string {
 	// Generate unique trace ID for correlation
 	return uuid.New().String()
@@ -196,7 +222,7 @@ func generateTraceID() string {
 
 func getSeverity(pod *v1.Pod) string {
 	name := pod.Name
-	if strings.Contains(name, "kafka") || strings.Contains(name, "postgres") {
+	if strings.Contains(name, "kafka") || strings.Contains(name, "postgres") || strings.Contains(name, "agent") {
 		return "P1"
 	} else if strings.Contains(name, "aggregator") {
 		return "P2"
@@ -247,7 +273,7 @@ func buildDescription(pod *v1.Pod) string {
 	return strings.Join(parts, "\n")
 }
 
-func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.PostgresAlertRepository) {
+func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.PostgresAlertRepository, slackClient *slack.Client) {
 	// Check if pod is healthy now
 	if isHealthy(pod) {
 		// Resolve the alert
@@ -257,6 +283,16 @@ func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.Post
 			return
 		}
 		log.Printf("✅ Alert RESOLVED: %s (ID: %s)", pod.Name, resolvedAlert.ID)
+
+		severity := getSeverity(pod)
+		if slackClient != nil {
+			channel := getChannelForSeverity(severity, slackClient.GetChannels())
+			err := notifySlackWithResolving(slackClient, resolvedAlert, severity, channel)
+			if err != nil {
+				log.Printf("⚠️ Slack notification failed for alert %s: %v", alert.ID, err)
+			}
+		}
+
 	} else {
 		// Still unhealthy, do nothing
 		log.Printf("⏳ Pod %s still unhealthy, alert remains open", pod.Name)
