@@ -26,8 +26,8 @@ type DbConfig struct {
 }
 
 type SlackConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	ChannelName string `yaml:"channel"`
+	Enabled  bool              `yaml:"enabled"`
+	Channels map[string]string `yaml:"channels"`
 }
 
 func Load() (Config, error) {
