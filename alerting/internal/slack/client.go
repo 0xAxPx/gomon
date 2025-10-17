@@ -12,8 +12,8 @@ import (
 )
 
 type Client struct {
-	client  *slack.Client
-	channel string
+	client   *slack.Client
+	channels map[string]string
 }
 
 func NewSlackClient(cfg config.SlackConfig) (*Client, error) {
@@ -30,25 +30,23 @@ func NewSlackClient(cfg config.SlackConfig) (*Client, error) {
 		return nil, fmt.Errorf("failed to authenticate with Slack: %w", err)
 	}
 
-	log.Printf("✅ Successfully connected to Slack, channel: %s", cfg.ChannelName)
+	log.Printf("✅ Successfully connected to Slack")
 
 	return &Client{
-		client:  api,
-		channel: cfg.ChannelName,
+		client:   api,
+		channels: cfg.Channels,
 	}, nil
 
 }
 
 func (c *Client) SendMessage(text string) error {
-	_, _, err := c.client.PostMessage(c.channel,
+	_, _, err := c.client.PostMessage(c.channels["default"],
 		slack.MsgOptionText(text, false),
-		slack.MsgOptionUsername("K8s Bot"),
-		slack.MsgOptionIconEmoji(":alert:"),
 	)
 	if err != nil {
-		log.Printf("ERROR: Could not send message to %s: %w", c.channel, err)
+		log.Printf("ERROR: Could not send message to %s: %w", c.channels["defaul"], err)
 	}
 
-	log.Printf("📤 Sent message to Slack channel %s", c.channel)
+	log.Printf("📤 Sent message to Slack channel %s", c.channels["default"])
 	return nil
 }
