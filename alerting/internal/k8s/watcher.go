@@ -200,6 +200,17 @@ func notifySlack(client *slack.Client, request models.CreateAlertRequest, respon
 
 func notifySlackWithResolving(client *slack.Client, alert *models.Alert, severity string, channelName string) error {
 	// Build message with full details
+
+	namespace := ""
+	if alert.Namespace != nil {
+		namespace = *alert.Namespace
+	}
+
+	description := ""
+	if alert.Description != nil {
+		description = *alert.Description
+	}
+
 	message := fmt.Sprintf(
 		"🚨 *%s Alert Resolved*\n"+
 			"*ID:* %s\n"+
@@ -211,8 +222,8 @@ func notifySlackWithResolving(client *slack.Client, alert *models.Alert, severit
 		severity,
 		alert.ID,
 		alert.Title,
-		alert.Namespace,
-		alert.Description,
+		namespace,
+		description,
 		alert.Status,
 		alert.ResolvedAt,
 	)
