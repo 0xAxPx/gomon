@@ -145,6 +145,11 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 	// Save to database
 	response, err := alertRepo.Create(request)
 	if err != nil {
+		// Check if it's a duplicate error
+		if strings.Contains(err.Error(), "duplicate") {
+			log.Printf("⚠️ Alert already exists for pod %s", pod.Name)
+			return
+		}
 		log.Printf("❌ Failed to create alert for pod %s: %v", pod.Name, err)
 		return
 	}
@@ -168,7 +173,7 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 
 func shouldNotifySlack(severity string) bool {
 	// Configure which severities trigger Slack
-	return severity == "P0" || severity == "P1" || severity == "P2s"
+	return severity == "P0" || severity == "P1" || severity == "P2"
 }
 
 func notifySlack(client *slack.Client, request models.CreateAlertRequest, response models.CreateAlertResponse, severity string, channelName string) error {
@@ -284,21 +289,37 @@ func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.Post
 		}
 		log.Printf("✅ Alert RESOLVED: %s (ID: %s)", pod.Name, resolvedAlert.ID)
 
-		severity := getSeverity(pod)
-		if slackClient != nil {
+		// Only notify Slack for important severities
+		severity := alert.Severity
+		if shouldNotifySlackForResolution(severity) && slackClient != nil {
 			channel := getChannelForSeverity(severity, slackClient.GetChannels())
 			err := notifySlackWithResolving(slackClient, resolvedAlert, severity, channel)
 			if err != nil {
-				log.Printf("⚠️ Slack notification failed for alert %s: %v", alert.ID, err)
+				log.Printf("⚠️ Slack notification failed for resolved alert %s: %v", alert.ID, err)
 			}
 		}
-
 	} else {
 		// Still unhealthy, do nothing
 		log.Printf("⏳ Pod %s still unhealthy, alert remains open", pod.Name)
 	}
 }
 
+func shouldNotifySlackForResolution(severity string) bool {
+	return severity == "P0" || severity == "P1" || severity == "P2"
+}
+
 func isHealthy(pod *v1.Pod) bool {
-	return pod.Status.Phase == v1.PodRunning
+	// More comprehensive health check
+	if pod.Status.Phase != v1.PodRunning {
+		return false
+	}
+
+	// Check if ALL containers are ready
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == v1.PodReady && condition.Status != v1.ConditionTrue {
+			return false
+		}
+	}
+
+	return true
 }
