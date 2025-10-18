@@ -211,13 +211,16 @@ func notifySlackWithResolving(client *slack.Client, alert *models.Alert, severit
 		description = *alert.Description
 	}
 
+	duration := alert.ResolvedAt.Sub(alert.CreatedAt)
+
 	message := fmt.Sprintf(
-		"🚨 *%s Alert Resolved*\n"+
+		"✅ *%s Alert Resolved*\n"+
 			"*ID:* %s\n"+
 			"*Title:* %s\n"+
 			"*Namespace:* %s\n"+
 			"*Description:* %s\n"+
 			"*Status:* %s\n"+
+			"*Duration:* %s\n"+
 			"*Resolved at:* %s",
 		severity,
 		alert.ID,
@@ -225,7 +228,8 @@ func notifySlackWithResolving(client *slack.Client, alert *models.Alert, severit
 		namespace,
 		description,
 		alert.Status,
-		alert.ResolvedAt,
+		duration.Round(time.Second).String(),
+		alert.ResolvedAt.Format(time.RFC3339),
 	)
 
 	return client.SendMessageToChannel(message, channelName)
