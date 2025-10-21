@@ -26,8 +26,15 @@ type DbConfig struct {
 }
 
 type SlackConfig struct {
-	Enabled  bool              `yaml:"enabled"`
-	Channels map[string]string `yaml:"channels"`
+	Enabled        bool                 `yaml:"enabled"`
+	Channels       map[string]string    `yaml:"channels"`
+	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"`
+}
+
+type CircuitBreakerConfig struct {
+	FailureThreshold    int `yaml:"failure_threshold"`
+	TimeoutDuration     int `yaml:"timeout_duration"`
+	HalfOpenMaxRequests int `yaml:"half_open"`
 }
 
 func Load() (Config, error) {

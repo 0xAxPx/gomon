@@ -11,3 +11,7 @@ slack:
   channels: 
         default: "#all-gomon-monitoring"
         critical: "#alert-critical"
+  circuit_breaker:
+        failure_threshold: 5 # open circuit breaker after 5 failures
+        timeout_duration: 60 # circuit breaker stays open for 60 secc
+        half_open: 3 # for testing purpose we use 3 conseq failures 
