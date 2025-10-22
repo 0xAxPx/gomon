@@ -2,21 +2,25 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"gomon/alerting/internal/models"
 	"gomon/alerting/internal/repository"
+	"gomon/alerting/internal/slack"
+	"gomon/alerting/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type AlertHandler struct {
-	repo repository.AlertRepository
+	repo        repository.AlertRepository
+	slackClient *slack.Client
 }
 
-func NewAlertHandler(repo repository.AlertRepository) *AlertHandler {
-	return &AlertHandler{repo: repo}
+func NewAlertHandler(repo repository.AlertRepository, slackClient *slack.Client) *AlertHandler {
+	return &AlertHandler{repo: repo, slackClient: slackClient}
 }
 
 func (h *AlertHandler) Create(ctx *gin.Context) {
@@ -26,6 +30,7 @@ func (h *AlertHandler) Create(ctx *gin.Context) {
 		return
 	}
 
+	// Save to database
 	response, err := h.repo.Create(request)
 	if err != nil {
 		if isDatabaseConstraintError(err) {
@@ -34,6 +39,11 @@ func (h *AlertHandler) Create(ctx *gin.Context) {
 		}
 		ctx.JSON(500, gin.H{"error": "Database operation failed", "details": err.Error()})
 		return
+	}
+
+	// Send to Slack
+	if h.slackClient != nil {
+		go h.sendSlackNotification(request, response)
 	}
 
 	ctx.JSON(201, response)
@@ -200,4 +210,43 @@ func isDatabaseConstraintError(err error) bool {
 	return strings.Contains(errorStr, "constraint") ||
 		strings.Contains(errorStr, "duplicate") ||
 		strings.Contains(errorStr, "violates")
+}
+
+func (h *AlertHandler) sendSlackNotification(request models.CreateAlertRequest, response models.CreateAlertResponse) {
+	// Check if this severity should trigger Slack notification
+	if !utils.ShouldNotifySlack(request.Severity) {
+		log.Printf("⏭️  Skipping Slack notification for severity: %s", request.Severity)
+		return
+	}
+
+	// Get appropriate channel based on severity
+	channels := h.slackClient.GetChannels()
+	channel := utils.GetChannelForSeverity(request.Severity, channels)
+
+	// Build alert message
+	message := fmt.Sprintf(
+		"🚨 *%s Alert Created via API*\n"+
+			"*ID:* %s\n"+
+			"*Title:* %s\n"+
+			"*Source:* %s\n"+
+			"*Namespace:* %s\n"+
+			"*Description:* %s\n"+
+			"*Status:* %s\n"+
+			"*Created:* %s",
+		request.Severity,
+		response.ID,
+		request.Title,
+		request.Source,
+		request.Namespace,
+		request.Description,
+		response.Status,
+		response.CreatedAt,
+	)
+
+	// Send to Slack (circuit breaker is inside SendMessageToChannel)
+	err := h.slackClient.SendMessageToChannel(message, channel)
+	if err != nil {
+		log.Printf("⚠️  Slack notification failed for alert %s: %v", response.ID, err)
+		// Don't fail the HTTP request - alert is already saved
+	}
 }
