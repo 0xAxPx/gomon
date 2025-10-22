@@ -18,3 +18,7 @@ data:
       channels: 
         default: "#all-gomon-monitoring"
         critical: "#alert-critical"
+      circuit_breaker:
+        failure_threshold: 5
+        timeout_duration: 60
+        half_open_max_requests: 3
