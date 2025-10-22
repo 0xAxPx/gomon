@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"gomon/alerting/internal/config"
 	"log"
-	"os"
 
 	"strings"
 
@@ -24,13 +23,14 @@ func NewSlackClient(cfg config.SlackConfig) (*Client, error) {
 
 	if !strings.HasPrefix(token, "xoxb-") {
 		log.Printf("SLACK_BOT_TOKEN must be a bot token (xoxb-)!!!")
-		os.Exit(1)
+		log.Println("We proceed with slack client to be nil, circuit breaker will handle it!")
 	}
 
 	api := slack.New(token)
 	_, err := api.AuthTest()
 	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate with Slack: %w", err)
+		log.Printf("⚠️ Slack authentication failed: %v", err)
+		log.Printf("⚠️ Service will continue, circuit breaker will handle failures")
 	}
 
 	log.Printf("✅ Successfully connected to Slack")
