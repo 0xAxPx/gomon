@@ -76,7 +76,7 @@ func (c *Client) SendMessageToChannel(text string, channelName string) error {
 	if err != nil {
 		c.circuitBreaker.recordFailure()
 		log.Printf("❌ Slack API failed (failures: %d)", c.circuitBreaker.GetFailureCount())
-		log.Printf("ERROR: Could not send message to %s: %v", channelName, err)
+		return fmt.Errorf("ERROR: Could not send message to %s: %v", channelName, err)
 	}
 
 	c.circuitBreaker.recordSuccess()
