@@ -156,17 +156,22 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 
 	log.Printf("🚨 ALERT CREATED: %s (ID: %s)", pod.Name, response.ID)
 
-	channels := slackClient.GetChannels()
+	// Send notification to Slack
+	if slackClient != nil {
+		channels := slackClient.GetChannels()
 
-	if shouldNotifySlack(severity) && slackClient != nil {
-		channel := getChannelForSeverity(severity, channels)
-		log.Printf("Send alert into %s channel, severity: %s", channel, severity)
-		err := notifySlack(slackClient, request, response, severity, channel)
-		if err != nil {
-			log.Printf("⚠️ Slack notification failed for alert %s: %v", response.ID, err)
+		if shouldNotifySlack(severity) {
+			channel := getChannelForSeverity(severity, channels)
+			log.Printf("Send alert into %s channel, severity: %s", channel, severity)
+			err := notifySlack(slackClient, request, response, severity, channel)
+			if err != nil {
+				log.Printf("⚠️ Slack notification failed for alert %s: %v", response.ID, err)
+			}
+		} else {
+			log.Printf("Nothing to send into slack [shouldNotifySlack: %w]", shouldNotifySlack(severity))
 		}
 	} else {
-		log.Printf("Nothing to send into slack [shouldNotifySlack: %w]", shouldNotifySlack(severity))
+		log.Printf("Slack client is nil and we do not send any notifications to Slack. Check logs if we had token issue...")
 	}
 
 }
