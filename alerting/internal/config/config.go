@@ -34,7 +34,7 @@ type SlackConfig struct {
 type CircuitBreakerConfig struct {
 	FailureThreshold    int `yaml:"failure_threshold"`
 	TimeoutDuration     int `yaml:"timeout_duration"`
-	HalfOpenMaxRequests int `yaml:"half_open"`
+	HalfOpenMaxRequests int `yaml:"half_open_max_requests"`
 }
 
 func Load() (Config, error) {
