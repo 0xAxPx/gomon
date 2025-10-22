@@ -16,6 +16,7 @@ import (
 	"gomon/alerting/internal/models"
 	"gomon/alerting/internal/repository"
 	"gomon/alerting/internal/slack"
+	"gomon/alerting/internal/utils"
 )
 
 func StartWatching(clientSet *kubernetes.Clientset, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) {
@@ -160,25 +161,22 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 	if slackClient != nil {
 		channels := slackClient.GetChannels()
 
-		if shouldNotifySlack(severity) {
-			channel := getChannelForSeverity(severity, channels)
+		shouldNotify := utils.ShouldNotifySlack(severity)
+
+		if shouldNotify {
+			channel := utils.GetChannelForSeverity(severity, channels)
 			log.Printf("Send alert into %s channel, severity: %s", channel, severity)
 			err := notifySlack(slackClient, request, response, severity, channel)
 			if err != nil {
 				log.Printf("⚠️ Slack notification failed for alert %s: %v", response.ID, err)
 			}
 		} else {
-			log.Printf("Nothing to send into slack [shouldNotifySlack: %w]", shouldNotifySlack(severity))
+			log.Printf("Nothing to send into slack [shouldNotifySlack: %w]", shouldNotify)
 		}
 	} else {
 		log.Printf("Slack client is nil and we do not send any notifications to Slack. Check logs if we had token issue...")
 	}
 
-}
-
-func shouldNotifySlack(severity string) bool {
-	// Configure which severities trigger Slack
-	return severity == "P0" || severity == "P1" || severity == "P2"
 }
 
 func notifySlack(client *slack.Client, request models.CreateAlertRequest, response models.CreateAlertResponse, severity string, channelName string) error {
@@ -256,20 +254,6 @@ func getSeverity(pod *v1.Pod) string {
 	}
 }
 
-func getChannelForSeverity(severity string, channels map[string]string) string {
-	switch severity {
-	case "P0", "P1":
-		if ch, ok := channels["critical"]; ok {
-			return ch
-		}
-	case "P2", "P3":
-		if ch, ok := channels["default"]; ok {
-			return ch
-		}
-	}
-	return channels["default"] // Fallback
-}
-
 func buildTitle(pod *v1.Pod) string {
 	if pod.Status.Phase != v1.PodRunning {
 		return fmt.Sprintf("Pod %s is %s", pod.Name, pod.Status.Phase)
@@ -312,7 +296,7 @@ func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.Post
 		// Only notify Slack for important severities
 		severity := alert.Severity
 		if shouldNotifySlackForResolution(severity) && slackClient != nil {
-			channel := getChannelForSeverity(severity, slackClient.GetChannels())
+			channel := utils.GetChannelForSeverity(severity, slackClient.GetChannels())
 			err := notifySlackWithResolving(slackClient, resolvedAlert, severity, channel)
 			if err != nil {
 				log.Printf("⚠️ Slack notification failed for resolved alert %s: %v", alert.ID, err)

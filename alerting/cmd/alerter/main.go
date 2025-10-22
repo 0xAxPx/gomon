@@ -71,7 +71,7 @@ func main() {
 	k8s.StartWatching(k8sClient, alertRepo, slackClient)
 
 	// Initialize handlers
-	alertHandler := handlers.NewAlertHandler(alertRepo)
+	alertHandler := handlers.NewAlertHandler(alertRepo, slackClient)
 	healthHandler := handlers.NewHealthHandler(healthChecker)
 
 	// Initialize and start server
