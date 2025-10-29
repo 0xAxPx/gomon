@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"gomon/alerting/internal/config"
 	"gomon/alerting/internal/database"
@@ -15,7 +16,6 @@ import (
 )
 
 func main() {
-
 	k8sClient, err := k8s.NewClient()
 	if err != nil {
 		log.Printf("Warning: Could not initialize K8s client: %v", err)
@@ -46,8 +46,27 @@ func main() {
 	fmt.Printf("Connected to database: %s:%d/%s\n",
 		cfg.Db.Host, cfg.Db.Port, cfg.Db.Database)
 
-	// Initialize
+	// Initialize repositories
+	alertRepo := repository.NewPostgresAlertRepository(db)
+	healthChecker := repository.NewPostgresHealthChecker(db)
+
+	// Initialize metrics
 	metrics := metrics.NewMetrics()
+
+	// ✅ Start background goroutine to update active alerts count
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			count, err := alertRepo.CountActiveAlerts()
+			if err != nil {
+				log.Printf("Failed to count active alerts: %v", err)
+				continue
+			}
+			metrics.SetActiveAlerts(float64(count))
+		}
+	}()
 
 	// Initialize slack connection
 	var slackClient *slack.Client
@@ -67,12 +86,8 @@ func main() {
 		log.Println("ℹ️  Slack notifications disabled in config")
 	}
 
-	// Initialize repositories
-	alertRepo := repository.NewPostgresAlertRepository(db)
-	healthChecker := repository.NewPostgresHealthChecker(db)
-
 	log.Println("Init watchers...")
-	k8s.StartWatching(k8sClient, alertRepo, slackClient)
+	k8s.StartWatching(k8sClient, alertRepo, slackClient, metrics)
 
 	// Initialize handlers
 	alertHandler := handlers.NewAlertHandler(alertRepo, slackClient, metrics)
