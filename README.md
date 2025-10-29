@@ -1,270 +1,272 @@
 # GoMon - Kubernetes Monitoring Platform
 
-A comprehensive, production-ready monitoring and observability platform built on Kubernetes, featuring real-time metrics collection, distributed tracing, log aggregation, and intelligent alerting.
+A production-ready monitoring and observability platform for Kubernetes with real-time metrics, distributed tracing, log aggregation, and intelligent alerting.
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.28+-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://golang.org/)
-[![Docker](https://img.shields.io/badge/Docker-Multi--stage-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
 
 ---
 
-## 🏗️ Architecture Overview
+## 🎯 What is GoMon?
 
-GoMon implements a microservices-based monitoring solution with three core components orchestrated on Kubernetes:
+GoMon is a **complete observability stack** running on Kubernetes that monitors system metrics, application logs, and distributed traces. Built with Go microservices, it demonstrates modern SRE practices including circuit breakers, graceful degradation, and GitOps deployment.
+
+---
+
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Kubernetes Cluster                          │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │                    Monitoring Namespace                      │ │
-│  │                                                              │ │
-│  │  ┌──────────┐    ┌───────────────┐    ┌──────────────┐   │ │
-│  │  │  Agent   │───▶│  Kafka (3x)   │───▶│  Aggregator  │   │ │
-│  │  │          │    │               │    │              │   │ │
-│  │  └──────────┘    └───────────────┘    └──────────────┘   │ │
-│  │       │                                      │             │ │
-│  │       │                                      ▼             │ │
-│  │       │                         ┌────────────────────────┐│ │
-│  │       │                         │  VictoriaMetrics       ││ │
-│  │       │                         └────────────────────────┘│ │
-│  │       │                                      │             │ │
-│  │       │                                      ▼             │ │
-│  │       │                         ┌────────────────────────┐│ │
-│  │       │                         │      Grafana           ││ │
-│  │       │                         └────────────────────────┘│ │
-│  │       │                                                    │ │
-│  │       ▼                                                    │ │
-│  │  ┌──────────────┐        ┌────────────────┐              │ │
-│  │  │   Jaeger     │        │   PostgreSQL   │              │ │
-│  │  │  (Tracing)   │        │                │              │ │
-│  │  └──────────────┘        └────────────────┘              │ │
-│  │                                  │                        │ │
-│  │       │                          ▼                        │ │
-│  │       │                  ┌──────────────┐                │ │
-│  │       │                  │  Alerting    │                │ │
-│  │       │                  │   Service    │                │ │
-│  │       │                  └──────────────┘                │ │
-│  │       │                                                   │ │
-│  │       ▼                                                   │ │
-│  │  ┌────────────┐       ┌──────────┐      ┌──────────┐   │ │
-│  │  │ Filebeat   │──────▶│ Logstash │─────▶│   ELK    │   │ │
-│  │  │            │       │          │      │ (VM)     │   │ │
-│  │  └────────────┘       └──────────┘      └──────────┘   │ │
-│  │                                                          │ │
-│  └──────────────────────────────────────────────────────────┘ │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐ │
-│  │               Ingress (nginx) - Local Access               │ │
-│  │  grafana.local | kibana.local | jaeger.local              │ │
-│  │  sonarqube.local | alerting.local                         │ │
-│  └──────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│              Kubernetes Cluster (monitoring ns)          │
+│                                                          │
+│  Metrics:  Agent → Kafka → Aggregator → VictoriaMetrics │
+│  Logs:     App → Filebeat → Logstash → Elasticsearch    │
+│  Traces:   Services → Jaeger Collector → Jaeger UI      │
+│  Alerts:   Alerting Service → Slack + PostgreSQL        │
+│                                                          │
+│  Visualization: Grafana | Kibana | Jaeger UI            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### **Data Flow**
+
+```mermaid
+graph LR
+    A[Agent] -->|Protobuf| K[Kafka 3-node]
+    K -->|Consumer| AG[Aggregator]
+    AG -->|Remote Write| VM[VictoriaMetrics]
+    VM --> G[Grafana]
+    AG -->|Logs| FB[Filebeat]
+    FB --> LS[Logstash]
+    LS --> ES[Elasticsearch]
+    ES --> KB[Kibana]
+    A -->|Traces| J[Jaeger]
 ```
 
 ---
 
-## 🎯 Core Components
+## 📊 Key Features
 
-### **1. Agent** - Metrics Collection
-**Language**: Go | **Image**: `ragazzo271985/agent:latest`
+### **Metrics Collection & Visualization**
+- ✅ Real-time system metrics (CPU, memory, disk, network)
+- ✅ VictoriaMetrics for efficient time-series storage
+- ✅ Grafana dashboards with custom panels
+- ✅ Prometheus-compatible metrics endpoint
 
-Lightweight system metrics collector that gathers CPU, memory, disk, and network statistics.
+### **Intelligent Alerting**
+- ✅ RESTful alert management API
+- ✅ PostgreSQL backend with JSONB support
+- ✅ Slack notifications with circuit breaker pattern
+- ✅ Kubernetes pod health monitoring
+- ✅ Auto-resolution of transient issues
 
-- **Features**:
-  - Real-time system metrics collection (gopsutil)
-  - Protobuf serialization for efficient transport
-  - Jaeger distributed tracing integration
-  - Concurrent metric gathering with goroutines
-  - Kafka producer with automatic retry
+### **Observability Stack**
+- ✅ Distributed tracing with Jaeger
+- ✅ Centralized logging (ELK stack)
+- ✅ Real-time metrics dashboards
+- ✅ Code quality analysis (SonarQube)
 
-- **Deployment**: 
-  - Resources: 256Mi RAM, 200m CPU
-  - Collection interval: 20 seconds
-  - Output: Kafka topic `metrics-topic`
-
-### **2. Aggregator** - Data Processing
-**Language**: Go | **Image**: `ragazzo271985/aggregator:latest`
-
-Consumes metrics from Kafka, processes them, and publishes to VictoriaMetrics for long-term storage.
-
-- **Features**:
-  - High-throughput Kafka consumer
-  - Protobuf deserialization
-  - VictoriaMetrics remote write protocol
-  - Filebeat sidecar for application logs
-  - Concurrent processing with worker pools
-
-- **Deployment**:
-  - Multi-container pod (aggregator + filebeat)
-  - Resources: 512Mi RAM, 200m CPU
-  - Log output: `/var/log/aggregator.log` → Logstash
-
-### **3. Alerting Service** - Incident Management
-**Language**: Go | **Image**: `ragazzo271985/alerting-service:latest`
-
-Intelligent alerting and incident management system with PostgreSQL backend.
-
-- **Features**:
-  - RESTful API for alert management
-  - PostgreSQL with JSONB for flexible schemas
-  - Kubernetes health monitoring (planned)
-  - Grafana webhook integration (planned)
-  - Slack bot integration (planned)
-
-- **Deployment**:
-  - Resources: 256Mi RAM, 100m CPU
-  - Health endpoint: `/health/database`
-  - External access: `http://alerting.local`
+### **Production-Ready Patterns**
+- ✅ Circuit breaker for external API calls
+- ✅ Graceful degradation (alerts saved even when Slack fails)
+- ✅ Infrastructure as Code (Terraform)
+- ✅ GitOps deployment ready
+- ✅ Multi-container pods with sidecars
 
 ---
 
-## 📊 Observability Stack
+## 🚀 Quick Start
 
-### **Metrics Pipeline**
-```
-Agent → Kafka → Aggregator → VictoriaMetrics → Grafana
-```
-- **VictoriaMetrics**: Time-series database optimized for metrics
-- **Grafana**: Visualization and dashboards (`http://grafana.local`)
+### **Prerequisites**
+- Docker Desktop with Kubernetes enabled
+- kubectl configured
+- 16GB+ RAM
 
-### **Logging Pipeline**
-```
-Application → Filebeat → Logstash → Elasticsearch → Kibana
-```
-- **Elasticsearch**: 8.7.0 running on external VM (192.168.0.45)
-- **Logstash**: Filter and enrichment with Ruby processing
-- **Kibana**: Log search and analysis (`http://kibana.local`)
+### **1. Deploy Infrastructure**
 
-### **Distributed Tracing**
-```
-Agent → Jaeger Collector → Jaeger Query → UI
-```
-- **Jaeger**: OpenTracing-compatible distributed tracing
-- **UI**: Trace visualization (`http://jaeger.local`)
+```bash
+# Clone repository
+git clone https://github.com/0xAxPx/gomon.git
+cd gomon
 
-### **Code Quality**
+# Deploy with Terraform
+cd terraform
+terraform init
+terraform apply
+
+# Or deploy with kubectl
+kubectl apply -f k8s/
 ```
-GitHub → SonarScanner → SonarQube → PostgreSQL
+
+### **2. Configure Local Access**
+
+Add to `/etc/hosts`:
+```bash
+127.0.0.1 grafana.local kibana.local jaeger.local alerting.local victoria.local
 ```
-- **SonarQube**: Static analysis and quality gates
-- **UI**: Code quality dashboard (`http://sonarqube.local`)
+
+### **3. Access Dashboards**
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| **Grafana** | http://grafana.local | admin/admin |
+| **Kibana** | http://kibana.local | - |
+| **Jaeger** | http://jaeger.local | - |
+| **VictoriaMetrics** | http://victoria.local | - |
+| **Alerting API** | http://alerting.local | - |
+
+---
+
+## 📈 Monitoring Dashboard
+
+![Grafana Dashboard](doc/images/grafana-dashboard.png)
+
+**Dashboard includes:**
+- Active alerts counter
+- Alert creation rate trends
+- Severity distribution (pie chart)
+- Circuit breaker health status
+- Slack notification success rate
+- API processing latency (p50, p95, p99)
+
+### **Creating Custom Dashboards**
+
+1. Add VictoriaMetrics data source in Grafana:
+   - URL: `http://victoria-metrics.monitoring.svc.cluster.local:8428`
+   - Type: Prometheus
+
+2. Import dashboard or build custom panels using PromQL queries
+
+3. Available metrics:
+   ```promql
+   alerting_active_alerts
+   alerting_alerts_created_total{severity="P1"}
+   alerting_circuit_breaker_state
+   alerting_alert_processing_duration_seconds
+   slack_notifications_sent_total{status="success"}
+   ```
 
 ---
 
 ## 🛠️ Technology Stack
 
-### **Core Technologies**
-- **Container Orchestration**: Kubernetes (Docker Desktop)
-- **Service Mesh**: Native K8s service discovery
-- **Ingress**: nginx-ingress-controller
-- **Storage**: PVC with dynamic provisioning (29Gi allocated)
-
-### **Languages & Frameworks**
-- **Go 1.22**: Agent, Aggregator, Alerting microservices
-- **Protocol Buffers**: Efficient data serialization
-- **Gin**: HTTP framework for REST APIs
-
-### **Data Infrastructure**
-- **Apache Kafka**: 3-node cluster for message streaming
-- **PostgreSQL 15**: Relational database (SonarQube, Alerting)
-- **VictoriaMetrics**: Metrics storage
-- **Elasticsearch 8.7**: Log storage (external VM)
-
-### **Observability Tools**
-- **Grafana**: Metrics visualization
-- **Kibana**: Log exploration
-- **Jaeger**: Distributed tracing
-- **SonarQube**: Code quality analysis
-
-### **GitOps & CI/CD**
-- **ArgoCD**: Continuous deployment
-- **GitHub**: Source control
-- **Docker Hub**: Container registry (`ragazzo271985/*`)
+**Languages:** Go 1.22  
+**Container Orchestration:** Kubernetes + Docker  
+**Message Queue:** Apache Kafka (3-node cluster)  
+**Databases:** PostgreSQL 15, VictoriaMetrics  
+**Observability:** Grafana, Kibana, Jaeger  
+**IaC:** Terraform  
+**Serialization:** Protocol Buffers  
 
 ---
 
-## 🌐 Networking
+## 🎯 Core Services
 
-### **Internal Service Communication**
-All services communicate via Kubernetes internal DNS:
-```
-service-name.namespace.svc.cluster.local
-```
+### **1. Agent** (`ragazzo271985/agent:latest`)
+Collects system metrics every 20s and publishes to Kafka.
 
-Example connections:
-- Agent → `kafka-0.monitoring.svc.cluster.local:9092`
-- Aggregator → `victoria-metrics.monitoring.svc.cluster.local:8428`
-- Alerting → `postgres.monitoring.svc.cluster.local:5432`
+**Resources:** 256Mi RAM, 200m CPU
 
-### **External Access via Ingress**
-Services exposed through nginx-ingress on `localhost`:
+### **2. Aggregator** (`ragazzo271985/aggregator:latest`)
+Consumes metrics from Kafka, processes, and writes to VictoriaMetrics.
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| Grafana | http://grafana.local | Metrics dashboards |
-| Kibana | http://kibana.local | Log analysis |
-| Jaeger | http://jaeger.local | Trace visualization |
-| SonarQube | http://sonarqube.local | Code quality |
-| Alerting | http://alerting.local | Alert API |
+**Resources:** 512Mi RAM, 200m CPU  
+**Features:** Filebeat sidecar for log shipping
 
-**Setup**: Add to `/etc/hosts`:
+### **3. Alerting Service** (`ragazzo271985/alerting-service:latest`)
+Manages alerts with PostgreSQL backend and Slack integration.
+
+**Resources:** 256Mi RAM, 100m CPU  
+**API Endpoints:**
 ```bash
-127.0.0.1 grafana.local kibana.local jaeger.local sonarqube.local alerting.local
+POST   /api/v1/alerts          # Create alert
+GET    /api/v1/alerts          # List alerts
+GET    /api/v1/alerts/:id      # Get alert details
+PUT    /api/v1/alerts/:id/acknowledge
+PUT    /api/v1/alerts/:id/resolve
+DELETE /api/v1/alerts/:id
+GET    /health/database        # Health check
+GET    /metrics                # Prometheus metrics
+```
+
+**Circuit Breaker Configuration:**
+```yaml
+slack:
+  circuit_breaker:
+    failure_threshold: 5      # Open after 5 failures
+    timeout_duration: 60      # Test recovery after 60s
+    half_open_max_requests: 3 # Allow 3 test requests
 ```
 
 ---
 
-## 🚀 Getting Started
+## 📊 Example Queries
 
-### **Prerequisites**
-- Docker Desktop with Kubernetes enabled
-- kubectl configured for local cluster
-- 16GB+ RAM recommended
-- macOS, Linux, or Windows with WSL2
+### **PromQL (Grafana/VictoriaMetrics)**
 
-### **Quick Start**
+```promql
+# Alert creation rate (per minute)
+rate(alerting_alerts_created_total[5m]) * 60
 
-1. **Clone the repository**
-```bash
-git clone https://github.com/0xAxPx/gomon.git
-cd gomon
+# Alerts by severity
+sum by(severity) (alerting_alerts_created_total)
+
+# API latency 95th percentile
+histogram_quantile(0.95, rate(alerting_alert_processing_duration_seconds_bucket[5m]))
+
+# Slack success rate
+(rate(slack_notifications_sent_total{status="success"}[5m]) / 
+ rate(slack_notifications_sent_total[5m])) * 100
 ```
 
-2. **Deploy infrastructure**
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
+### **Create Alert via API**
 
-# Verify pods are running
-kubectl get pods -n monitoring
+```bash
+curl -X POST http://alerting.local/api/v1/alerts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "kubernetes",
+    "severity": "P1",
+    "title": "High CPU Usage",
+    "description": "Pod cpu-intensive is using 95% CPU",
+    "namespace": "production"
+  }'
 ```
 
-3. **Configure local access**
-```bash
-# Add hostnames to /etc/hosts
-echo "127.0.0.1 grafana.local kibana.local jaeger.local sonarqube.local alerting.local" | sudo tee -a /etc/hosts
+---
+
+## 🔧 Configuration
+
+### **VictoriaMetrics Scrape Config**
+
+Configured via Terraform to scrape metrics every 30s:
+
+```yaml
+scrape_configs:
+- job_name: 'alerting-service'
+  static_configs:
+  - targets: ['alerting.monitoring.svc.cluster.local:8099']
+  metrics_path: '/metrics'
+  scrape_interval: 30s
 ```
 
-4. **Access dashboards**
-- Grafana: http://grafana.local
-- Kibana: http://kibana.local  
-- Jaeger: http://jaeger.local
-- Alerting Health: http://alerting.local/health/database
+### **PostgreSQL Schema**
 
-### **Building Custom Images**
-
-```bash
-# Build agent
-docker build -t ragazzo271985/agent:latest -f Dockerfile.agent .
-docker push ragazzo271985/agent:latest
-
-# Build aggregator
-docker build -t ragazzo271985/aggregator:latest -f Dockerfile.aggregator .
-docker push ragazzo271985/aggregator:latest
-
-# Build alerting service
-docker build -t ragazzo271985/alerting-service:latest -f alerting/Dockerfile.alerting .
-docker push ragazzo271985/alerting-service:latest
+```sql
+-- Active alerts table
+CREATE TABLE alerts_active (
+  id UUID PRIMARY KEY,
+  source VARCHAR CHECK (source IN ('grafana', 'kubernetes', 'health-check', 'api')),
+  severity VARCHAR CHECK (severity IN ('P0', 'P1', 'P2', 'P3', 'P4')),
+  status VARCHAR DEFAULT 'firing',
+  title VARCHAR NOT NULL,
+  description TEXT,
+  namespace VARCHAR,
+  labels JSONB,
+  created_at TIMESTAMP DEFAULT NOW(),
+  resolved_at TIMESTAMP
+);
 ```
 
 ---
@@ -273,155 +275,122 @@ docker push ragazzo271985/alerting-service:latest
 
 ```
 gomon/
-├── agent/                    # Metrics collection service
-│   └── main.go
-├── aggregator/               # Data processing service
-│   └── aggregator.go
-├── alerting/                 # Alerting service
-│   ├── cmd/alerter/
+├── agent/                   # Metrics collector
+├── aggregator/              # Data processor
+├── alerting/                # Alert management service
+│   ├── cmd/main.go
 │   ├── internal/
-│   ├── configs/
-│   └── k8s/
-├── kafka/                    # Kafka producer/consumer
-├── pb/                       # Protocol Buffer definitions
-├── k8s/                      # Kubernetes manifests
-│   ├── agent/
-│   ├── aggregator/
-│   ├── kafka/
-│   ├── victoria-metrics/
-│   ├── postgres/
-│   └── ...
-├── terraform/                # Infrastructure as Code (planned)
-├── docs/                     # Documentation
+│   │   ├── handlers/       # HTTP handlers
+│   │   ├── repository/     # Database layer
+│   │   ├── slack/          # Slack client + circuit breaker
+│   │   ├── metrics/        # Prometheus metrics
+│   │   └── k8s/            # Kubernetes watchers
+│   ├── configs/            # Configuration files
+│   └── Dockerfile.alerting
+├── terraform/               # Infrastructure as Code
+│   └── main.tf             # K8s resources
+├── k8s/                    # Kubernetes manifests
+├── docs/                   # Documentation
+│   ├── images/             # Screenshots
 │   ├── gomon-alerting-design.md
 │   └── gomon_infrastructure_design.md
-├── Dockerfile.agent
-├── Dockerfile.aggregator
-└── go.mod
+└── README.md
 ```
 
 ---
 
-## 📈 Performance Metrics
+## 🧪 Testing
 
-### **Current Capacity**
-- **Metrics Throughput**: ~3 metrics/second per agent
-- **Log Processing**: 11,500+ documents indexed
-- **Pod Density**: 13+ pods on single Docker Desktop cluster
-- **Resource Efficiency**: ~10-15Gi memory, 4-6 CPU cores
+### **Unit Tests**
 
-### **Storage**
-- **PVC Allocation**: 29Gi total
-- **Elasticsearch**: External VM (192.168.0.45)
-- **VictoriaMetrics**: Time-series compression
-- **PostgreSQL**: ACID-compliant relational storage
-
----
-
-## 🔐 Security Features
-
-- **Non-root containers**: All services run as unprivileged users
-- **RBAC**: Kubernetes role-based access control
-- **Resource limits**: CPU and memory quotas enforced
-- **Network policies**: Service-to-service restrictions
-- **TLS**: CA certificates for HTTPS communications
-
----
-
-## 🔧 Configuration
-
-### **Environment Variables**
-
-**Agent:**
-```yaml
-KAFKA_BROKERS: kafka-0:9092,kafka-1:9092,kafka-2:9092
-KAFKA_TOPIC: metrics-topic
-JAEGER_AGENT_HOST: jaeger
-JAEGER_AGENT_PORT: 6831
+```bash
+cd alerting
+go test -v ./...
 ```
 
-**Aggregator:**
-```yaml
-KAFKA_BROKERS: kafka-0:9092,kafka-1:9092,kafka-2:9092
-KAFKA_TOPIC: metrics-topic
-VICTORIA_METRICS_URL: http://victoria-metrics:8428/api/v1/write
-```
+### **Integration Tests**
 
-**Alerting:**
-```yaml
-CONFIG_PATH: /app/configs/prod.yaml
-GIN_MODE: release
+```bash
+# Test circuit breaker
+for i in {1..10}; do
+  curl -X POST http://alerting.local/api/v1/alerts \
+    -H "Content-Type: application/json" \
+    -d '{"source":"kubernetes","severity":"P1","title":"Test","namespace":"test"}'
+  sleep 1
+done
+
+# Check circuit breaker opened after 5 failures
+kubectl logs -n monitoring -l app=alerting | grep "CIRCUIT BREAKER OPENED"
 ```
 
 ---
 
-## 📊 Monitoring the Monitors
+## 📈 Performance
 
-The platform includes self-monitoring capabilities:
-
-- **Kafka**: JMX metrics exported to Prometheus
-- **PostgreSQL**: Query performance and connection pooling
-- **Kubernetes**: Metrics-server for resource tracking
-- **Application**: Structured logging to Elasticsearch
+**Current Metrics:**
+- **Throughput:** 3 metrics/second per agent
+- **Latency:** ~4.75ms average API response time
+- **Reliability:** 100% Slack notification success (with circuit breaker)
+- **Storage:** 29Gi PVC allocation
+- **Resource Usage:** 10-15Gi memory, 4-6 CPU cores
 
 ---
 
 ## 🗺️ Roadmap
 
-### **Phase 3: Infrastructure as Code** (Current)
-- ✅ Alerting service deployment
-- 🔄 Terraform for Kubernetes resources
-- 📋 Alert Management API
-- 📋 Kubernetes pod monitoring
+### ✅ **Completed**
+- Real-time metrics collection
+- Distributed tracing integration
+- Centralized logging (ELK)
+- Alert management API
+- Circuit breaker pattern
+- Grafana dashboards
+- Terraform deployment
+- Prometheus metrics export
 
-### **Phase 4: Cloud Migration** (Planned)
-- AWS EKS deployment
-- Managed services (MSK, RDS, OpenSearch)
-- Auto-scaling and high availability
-- Multi-region support
+### 🔄 **In Progress**
+- Kubernetes health monitoring
+- Alert correlation
+- Auto-resolution logic
 
-### **Phase 5: Advanced Features** (Future)
-- Machine learning anomaly detection
-- Predictive alerting
-- Self-healing automation
-- Multi-cloud support
+### 📋 **Planned**
+- Opsgenie integration
+- Grafana alerting rules
+- Advanced analytics
+- Multi-cluster support
+- Cloud migration (AWS EKS)
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! This is a learning-focused project.
+This is a learning-focused project. Contributions welcome!
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create feature branch (`git checkout -b feature/amazing`)
+3. Commit changes (`git commit -m 'Add feature'`)
+4. Push to branch (`git push origin feature/amazing`)
+5. Open Pull Request
 
 ---
 
 ## 📝 License
 
-This project is open-source and available for educational purposes.
+Open-source for educational purposes.
 
 ---
 
 ## 👤 Author
 
-**GitHub**: [@0xAxPx](https://github.com/0xAxPx)
+**GitHub:** [@0xAxPx](https://github.com/0xAxPx)
 
 ---
 
 ## 🙏 Acknowledgments
 
-Built with:
-- Kubernetes & Docker ecosystem
-- Elastic Stack (ELK)
-- CNCF projects (Jaeger, Grafana)
-- Go community libraries
-- Open-source monitoring tools
+Built with: Kubernetes, Go, Kafka, Grafana, Elasticsearch, Jaeger, VictoriaMetrics, and the amazing open-source community.
 
 ---
 
-**Project Status**: ✅ Production-ready for local development  
-**Last Updated**: September 29, 2025
+**Status:** ✅ Production-ready  
+**Last Updated:** October 29, 2025
