@@ -289,3 +289,14 @@ func NewPostgresHealthChecker(db *sql.DB) *PostgresHealthChecker {
 func (h *PostgresHealthChecker) CheckHealth() error {
 	return h.db.Ping()
 }
+
+func (r *PostgresAlertRepository) CountActiveAlerts() (int, error) {
+	var count int
+	err := r.db.QueryRow(`
+        SELECT COUNT(*) 
+        FROM alerts_active 
+        WHERE status IN ('firing', 'acknowledged')
+    `).Scan(&count)
+
+	return count, err
+}

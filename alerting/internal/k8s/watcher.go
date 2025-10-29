@@ -13,26 +13,27 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
+	"gomon/alerting/internal/metrics"
 	"gomon/alerting/internal/models"
 	"gomon/alerting/internal/repository"
 	"gomon/alerting/internal/slack"
 	"gomon/alerting/internal/utils"
 )
 
-func StartWatching(clientSet *kubernetes.Clientset, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) {
+func StartWatching(clientSet *kubernetes.Clientset, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client, metrics *metrics.Metrics) {
 	namespaces := []string{"monitoring", "kube-system", "ingress-nginx"}
 
 	for _, ns := range namespaces {
 		// Run each watcher concurrently
-		go watchNamespace(clientSet, ns, alertRepo, slackClient)
+		go watchNamespace(clientSet, ns, alertRepo, slackClient, metrics)
 	}
 }
 
-func watchNamespace(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository, slackCient *slack.Client) {
+func watchNamespace(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository, slackCient *slack.Client, metrics *metrics.Metrics) {
 	log.Printf("Starting watcher for namespace: %s", namespace)
 
 	for {
-		if err := watchLoop(clientSet, namespace, alertRepo, slackCient); err != nil {
+		if err := watchLoop(clientSet, namespace, alertRepo, slackCient, metrics); err != nil {
 			log.Printf("Watch error in %s: %v. Reconnecting in 10s...", namespace, err)
 			time.Sleep(10 * time.Second)
 		}
@@ -40,7 +41,7 @@ func watchNamespace(clientSet *kubernetes.Clientset, namespace string, alertRepo
 
 }
 
-func watchLoop(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) error {
+func watchLoop(clientSet *kubernetes.Clientset, namespace string, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client, metrics *metrics.Metrics) error {
 
 	watcher, err := clientSet.CoreV1().Pods(namespace).Watch(
 		context.Background(),
@@ -53,13 +54,13 @@ func watchLoop(clientSet *kubernetes.Clientset, namespace string, alertRepo *rep
 	defer watcher.Stop()
 
 	for event := range watcher.ResultChan() {
-		handleEvent(event, namespace, alertRepo, slackClient)
+		handleEvent(event, namespace, alertRepo, slackClient, metrics)
 	}
 
 	return nil
 }
 
-func handleEvent(event watch.Event, namespace string, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) {
+func handleEvent(event watch.Event, namespace string, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client, metrics *metrics.Metrics) {
 	pod, ok := event.Object.(*v1.Pod)
 	if !ok {
 		return
@@ -82,11 +83,11 @@ func handleEvent(event watch.Event, namespace string, alertRepo *repository.Post
 
 		if existingAlert != nil {
 			// Alert exists - handle it
-			handleExistingAlert(pod, existingAlert, alertRepo, slackClient)
+			handleExistingAlert(pod, existingAlert, alertRepo, slackClient, metrics)
 		} else {
 			// No alert - check if should create
 			if shouldAlert(pod, namespace) {
-				createAlert(pod, alertRepo, slackClient)
+				createAlert(pod, alertRepo, slackClient, metrics)
 			}
 		}
 
@@ -123,7 +124,7 @@ func getPodRestarts(pod *v1.Pod) int32 {
 	return restarts
 }
 
-func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client) {
+func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, slackClient *slack.Client, metrics *metrics.Metrics) {
 	labels := make(map[string]string)
 	for k, v := range pod.Labels {
 		labels[k] = v
@@ -146,7 +147,6 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 	// Save to database
 	response, err := alertRepo.Create(request)
 	if err != nil {
-		// Check if it's a duplicate error
 		if strings.Contains(err.Error(), "duplicate") {
 			log.Printf("⚠️ Alert already exists for pod %s", pod.Name)
 			return
@@ -157,10 +157,12 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 
 	log.Printf("🚨 ALERT CREATED: %s (ID: %s)", pod.Name, response.ID)
 
+	// Track metrics for alert creation
+	metrics.IncAlertsCreated(severity, "kubernetes")
+
 	// Send notification to Slack
 	if slackClient != nil {
 		channels := slackClient.GetChannels()
-
 		shouldNotify := utils.ShouldNotifySlack(severity)
 
 		if shouldNotify {
@@ -169,14 +171,16 @@ func createAlert(pod *v1.Pod, alertRepo *repository.PostgresAlertRepository, sla
 			err := notifySlack(slackClient, request, response, severity, channel)
 			if err != nil {
 				log.Printf("⚠️ Slack notification failed for alert %s: %v", response.ID, err)
+				metrics.IncSlackNotifications("failure")
+			} else {
+				metrics.IncSlackNotifications("success")
 			}
 		} else {
-			log.Printf("Nothing to send into slack [shouldNotifySlack: %w]", shouldNotify)
+			log.Printf("Nothing to send into slack [shouldNotifySlack: %t]", shouldNotify)
 		}
 	} else {
 		log.Printf("Slack client is nil and we do not send any notifications to Slack. Check logs if we had token issue...")
 	}
-
 }
 
 func notifySlack(client *slack.Client, request models.CreateAlertRequest, response models.CreateAlertResponse, severity string, channelName string) error {
@@ -282,10 +286,8 @@ func buildDescription(pod *v1.Pod) string {
 	return strings.Join(parts, "\n")
 }
 
-func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.PostgresAlertRepository, slackClient *slack.Client) {
-	// Check if pod is healthy now
+func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.PostgresAlertRepository, slackClient *slack.Client, metrics *metrics.Metrics) { // ✅ ADD metrics parameter
 	if isHealthy(pod) {
-		// Resolve the alert
 		resolvedAlert, err := repo.Resolve(alert.ID)
 		if err != nil {
 			log.Printf("❌ Failed to resolve alert: %v", err)
@@ -300,10 +302,12 @@ func handleExistingAlert(pod *v1.Pod, alert *models.Alert, repo *repository.Post
 			err := notifySlackWithResolving(slackClient, resolvedAlert, severity, channel)
 			if err != nil {
 				log.Printf("⚠️ Slack notification failed for resolved alert %s: %v", alert.ID, err)
+				metrics.IncSlackNotifications("failure")
+			} else {
+				metrics.IncSlackNotifications("success")
 			}
 		}
 	} else {
-		// Still unhealthy, do nothing
 		log.Printf("⏳ Pod %s still unhealthy, alert remains open", pod.Name)
 	}
 }
