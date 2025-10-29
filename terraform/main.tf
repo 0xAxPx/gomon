@@ -75,6 +75,11 @@ resource "kubernetes_deployment" "victoria_metrics" {
 
   spec {
     replicas = 1
+
+    strategy {
+      type = "Recreate"
+    }
+
     selector {
       match_labels = {
         app = "victoria-metrics"
