@@ -97,11 +97,17 @@ resource "kubernetes_deployment" "victoria_metrics" {
             container_port = 8428
           }
           
-          args = ["-storageDataPath=/var/lib/victoria-metrics"]
+          args = ["-storageDataPath=/var/lib/victoria-metrics", "-promscrape.config=/etc/vm/scrape.yml"]
           
           volume_mount {
             name       = "vm-data"
             mount_path = "/var/lib/victoria-metrics"
+          }
+
+          volume_mount {
+            name       = "scrape-config"
+            mount_path = "/etc/vm"
+            read_only  = true
           }
           
           resources {
@@ -120,6 +126,12 @@ resource "kubernetes_deployment" "victoria_metrics" {
           name = "vm-data"
           persistent_volume_claim {
             claim_name = kubernetes_persistent_volume_claim.victoria_metrics_data.metadata[0].name
+          }
+        }
+        volume {
+          name = "scrape-config"
+          config_map {
+            name = kubernetes_config_map.victoria_metrics_scrape_config.metadata[0].name
           }
         }
       }
@@ -153,6 +165,51 @@ resource "kubernetes_service" "victoria_metrics" {
   }
 }
 
+# VictoriaMetrics Scrape Configuration
+resource "kubernetes_config_map" "victoria_metrics_scrape_config" {
+  metadata {
+    name      = "victoria-metrics-scrape-config"
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "victoria-metrics"
+      tier      = "configuration"
+    })
+  }
+
+  data = {
+    "scrape.yml" = <<-EOF
+      global:
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        external_labels:
+          cluster: 'gomon-dev'
+          environment: 'development'
+      
+      scrape_configs:
+      # Alerting Service Metrics
+      - job_name: 'alerting-service'
+        static_configs:
+        - targets: ['alerting.monitoring.svc.cluster.local:8099']
+          labels:
+            service: 'alerting'
+            component: 'alerting-service'
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+        scrape_timeout: 10s
+      
+      # VictoriaMetrics Self-Monitoring
+      - job_name: 'victoria-metrics'
+        static_configs:
+        - targets: ['localhost:8428']
+          labels:
+            service: 'victoria-metrics'
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+    EOF
+  }
+}
+
+# Postgres
 resource "kubernetes_config_map" "postgres_config" {
   metadata {
     name      = "postgres-config"
