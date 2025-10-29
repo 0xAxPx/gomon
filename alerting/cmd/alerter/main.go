@@ -8,6 +8,7 @@ import (
 	"gomon/alerting/internal/database"
 	"gomon/alerting/internal/handlers"
 	"gomon/alerting/internal/k8s"
+	"gomon/alerting/internal/metrics"
 	"gomon/alerting/internal/repository"
 	"gomon/alerting/internal/server"
 	"gomon/alerting/internal/slack"
@@ -45,10 +46,13 @@ func main() {
 	fmt.Printf("Connected to database: %s:%d/%s\n",
 		cfg.Db.Host, cfg.Db.Port, cfg.Db.Database)
 
+	// Initialize
+	metrics := metrics.NewMetrics()
+
 	// Initialize slack connection
 	var slackClient *slack.Client
 	if cfg.Slack.Enabled {
-		slackClient, err = slack.NewSlackClient(cfg.Slack)
+		slackClient, err = slack.NewSlackClient(cfg.Slack, metrics)
 		if err != nil {
 			log.Printf("⚠️  Could not initialize Slack: %v", err)
 			log.Println("Continuing without Slack notifications...")
@@ -71,7 +75,7 @@ func main() {
 	k8s.StartWatching(k8sClient, alertRepo, slackClient)
 
 	// Initialize handlers
-	alertHandler := handlers.NewAlertHandler(alertRepo, slackClient)
+	alertHandler := handlers.NewAlertHandler(alertRepo, slackClient, metrics)
 	healthHandler := handlers.NewHealthHandler(healthChecker)
 
 	// Initialize and start server

@@ -7,6 +7,8 @@ import (
 	"gomon/alerting/internal/handlers"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
@@ -28,6 +30,9 @@ func New(alertHandler *handlers.AlertHandler, healthHandler *handlers.HealthHand
 func (s *Server) SetupRoutes() {
 	// Health check
 	s.router.GET("/health/database", s.healthHandler.CheckDatabase)
+
+	// Prometheus metrics
+	s.router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Alert routes
 	api := s.router.Group("/api/v1/alerts")
