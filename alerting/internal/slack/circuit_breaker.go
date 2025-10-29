@@ -2,6 +2,7 @@ package slack
 
 import (
 	"gomon/alerting/internal/config"
+	"gomon/alerting/internal/metrics"
 	"log"
 	"sync"
 	"time"
@@ -19,21 +20,27 @@ type CircuitBreaker struct {
 	lastFailureTime time.Time
 	config          config.CircuitBreakerConfig
 	mutex           sync.RWMutex
+	metrics         *metrics.Metrics
 }
 
-func NewCircuitBreaker(configCB config.CircuitBreakerConfig) *CircuitBreaker {
+func NewCircuitBreaker(configCB config.CircuitBreakerConfig, metrics *metrics.Metrics) *CircuitBreaker {
 
 	log.Printf("🔧 Circuit breaker initialized: threshold=%d, timeout=%ds, half_open=%d",
 		configCB.FailureThreshold,
 		configCB.TimeoutDuration,
 		configCB.HalfOpenMaxRequests)
 
-	return &CircuitBreaker{
+	cb := &CircuitBreaker{
 		state:           CLOSED,
 		failureCount:    0,
 		lastFailureTime: time.Time{},
 		config:          configCB,
+		metrics:         metrics,
 	}
+
+	metrics.SetCircuitBreakerState(0)
+
+	return cb
 
 }
 
@@ -80,6 +87,7 @@ func (cb *CircuitBreaker) recordFailure() {
 		cb.state = OPEN
 		log.Printf("🔴 CIRCUIT BREAKER OPENED! Failures: %d (threshold: %d)",
 			cb.failureCount, cb.config.FailureThreshold)
+		cb.metrics.SetCircuitBreakerState(1)
 	}
 
 	if cb.state == HALF_OPEN {
@@ -100,6 +108,7 @@ func (cb *CircuitBreaker) recordSuccess() {
 	if cb.state == HALF_OPEN {
 		cb.state = CLOSED
 		log.Printf("🟢 Circuit breaker CLOSED (recovered)")
+		cb.metrics.SetCircuitBreakerState(0)
 	}
 
 }

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
+	"time"
 
+	"gomon/alerting/internal/metrics"
 	"gomon/alerting/internal/models"
 	"gomon/alerting/internal/repository"
 	"gomon/alerting/internal/slack"
@@ -15,15 +18,19 @@ import (
 )
 
 type AlertHandler struct {
-	repo        repository.AlertRepository
-	slackClient *slack.Client
+	repo             repository.AlertRepository
+	slackClient      *slack.Client
+	metrics          *metrics.Metrics
+	activeAlertCount int64
+	mu               sync.Mutex
 }
 
-func NewAlertHandler(repo repository.AlertRepository, slackClient *slack.Client) *AlertHandler {
-	return &AlertHandler{repo: repo, slackClient: slackClient}
+func NewAlertHandler(repo repository.AlertRepository, slackClient *slack.Client, metrics *metrics.Metrics) *AlertHandler {
+	return &AlertHandler{repo: repo, slackClient: slackClient, metrics: metrics}
 }
 
 func (h *AlertHandler) Create(ctx *gin.Context) {
+	start := time.Now()
 	var request models.CreateAlertRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
 		ctx.JSON(400, gin.H{"error": "Invalid JSON", "details": err.Error()})
@@ -41,9 +48,23 @@ func (h *AlertHandler) Create(ctx *gin.Context) {
 		return
 	}
 
+	// Increment active alerts counter
+	h.mu.Lock()
+	h.activeAlertCount++
+	count := h.activeAlertCount
+	h.mu.Unlock()
+	h.metrics.SetActiveAlerts(float64(count))
+
+	// Calculate processing time
+	duration := time.Since(start).Seconds()
+	h.metrics.SetAlertProcessingTime(duration)
+
+	// Increment alerts created counter
+	h.metrics.IncAlertsCreated(request.Severity, request.Source)
+
 	// Send to Slack
 	if h.slackClient != nil {
-		go h.sendSlackNotification(request, response)
+		go h.sendSlackNotification(request, response, h.metrics)
 	}
 
 	ctx.JSON(201, response)
@@ -153,6 +174,13 @@ func (h *AlertHandler) Resolve(ctx *gin.Context) {
 		return
 	}
 
+	//Decrement active alerts
+	h.mu.Lock()
+	h.activeAlertCount--
+	count := h.activeAlertCount
+	h.mu.Unlock()
+	h.metrics.SetActiveAlerts(float64(count))
+
 	ctx.JSON(200, alert)
 }
 
@@ -212,7 +240,7 @@ func isDatabaseConstraintError(err error) bool {
 		strings.Contains(errorStr, "violates")
 }
 
-func (h *AlertHandler) sendSlackNotification(request models.CreateAlertRequest, response models.CreateAlertResponse) {
+func (h *AlertHandler) sendSlackNotification(request models.CreateAlertRequest, response models.CreateAlertResponse, metrics *metrics.Metrics) {
 	// Check if this severity should trigger Slack notification
 	if !utils.ShouldNotifySlack(request.Severity) {
 		log.Printf("⏭️  Skipping Slack notification for severity: %s", request.Severity)
@@ -247,6 +275,8 @@ func (h *AlertHandler) sendSlackNotification(request models.CreateAlertRequest, 
 	err := h.slackClient.SendMessageToChannel(message, channel)
 	if err != nil {
 		log.Printf("⚠️  Slack notification failed for alert %s: %v", response.ID, err)
-		// Don't fail the HTTP request - alert is already saved
+		h.metrics.IncSlackNotifications("failure")
+	} else {
+		h.metrics.IncSlackNotifications("success")
 	}
 }

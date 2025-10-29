@@ -3,6 +3,7 @@ package slack
 import (
 	"fmt"
 	"gomon/alerting/internal/config"
+	"gomon/alerting/internal/metrics"
 	"log"
 
 	"strings"
@@ -16,10 +17,10 @@ type Client struct {
 	circuitBreaker *CircuitBreaker
 }
 
-func NewSlackClient(cfg config.SlackConfig) (*Client, error) {
+func NewSlackClient(cfg config.SlackConfig, metrics *metrics.Metrics) (*Client, error) {
 	token := config.GetSlackToken()
 
-	circuitBreaker := NewCircuitBreaker(cfg.CircuitBreaker)
+	circuitBreaker := NewCircuitBreaker(cfg.CircuitBreaker, metrics)
 
 	if !strings.HasPrefix(token, "xoxb-") {
 		log.Printf("SLACK_BOT_TOKEN must be a bot token (xoxb-)!!!")
