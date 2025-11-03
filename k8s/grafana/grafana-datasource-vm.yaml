@@ -10,7 +10,7 @@ data:
       - name: VictoriaMetrics
         type: prometheus
         access: proxy
-        url: http://victoria.local:8428
+        url: http://victoria.local
         isDefault: true
         editable: false
         jsonData:
