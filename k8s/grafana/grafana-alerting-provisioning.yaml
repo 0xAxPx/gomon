@@ -1,3 +1,4 @@
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -27,6 +28,25 @@ data:
                 {{ range .Annotations.SortedPairs }} - {{ .Name }} = {{ .Value }}
                 {{ end }}
                 {{ end }}
+    
+    policies:
+      - orgId: 1
+        receiver: slack-webhook
+        group_by: ['alertname', 'severity', 'component']
+        group_wait: 10s
+        group_interval: 5m
+        repeat_interval: 4h
+        routes:
+          - receiver: slack-webhook
+            matchers:
+              - severity = critical
+            group_wait: 5s
+            repeat_interval: 2h
+          - receiver: slack-webhook
+            matchers:
+              - severity = warning
+            group_wait: 10s
+            repeat_interval: 4h
   
   alert-rules.yaml: |
     apiVersion: 1
