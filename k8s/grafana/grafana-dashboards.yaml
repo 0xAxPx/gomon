@@ -6,86 +6,152 @@ metadata:
 data:
   gomon-monitoring.json: |
     {
-      "dashboard": {
-        "title": "GoMon Alerting Service Monitoring",
-        "tags": ["gomon", "alerting", "monitoring"],
-        "timezone": "browser",
-        "schemaVersion": 16,
-        "version": 1,
-        "refresh": "10s",
-        "panels": [
-          {
-            "id": 1,
-            "title": "Active Alerts",
-            "type": "stat",
-            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
-            "targets": [
-              {
-                "expr": "alerting_active_alerts",
-                "refId": "A"
-              }
-            ],
-            "options": {
-              "colorMode": "value",
-              "graphMode": "area",
-              "orientation": "auto"
-            },
-            "fieldConfig": {
-              "defaults": {
-                "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                    {"value": 0, "color": "green"},
-                    {"value": 5, "color": "yellow"},
-                    {"value": 10, "color": "red"}
-                  ]
-                }
+      "title": "GoMon Alerting Service Monitoring",
+      "tags": ["gomon", "alerting", "monitoring"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Active Alerts",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "alerting_active_alerts",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
               }
             }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "orientation": "auto"
           },
-          {
-            "id": 2,
-            "title": "Alert Creation Rate",
-            "type": "graph",
-            "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
-            "targets": [
-              {
-                "expr": "rate(alerting_alerts_created_total[5m])",
-                "refId": "A",
-                "legendFormat": "Alerts/sec"
-              }
-            ]
-          },
-          {
-            "id": 3,
-            "title": "Circuit Breaker State",
-            "type": "stat",
-            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
-            "targets": [
-              {
-                "expr": "alerting_circuit_breaker_state",
-                "refId": "A"
-              }
-            ],
-            "options": {
-              "colorMode": "background"
-            },
-            "fieldConfig": {
-              "defaults": {
-                "mappings": [
-                  {"value": 0, "text": "CLOSED"},
-                  {"value": 1, "text": "OPEN"}
-                ],
-                "thresholds": {
-                  "steps": [
-                    {"value": 0, "color": "green"},
-                    {"value": 1, "color": "red"}
-                  ]
-                }
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": null, "color": "green"},
+                  {"value": 5, "color": "yellow"},
+                  {"value": 10, "color": "red"}
+                ]
               }
             }
           }
-        ]
-      },
-      "overwrite": true
+        },
+        {
+          "id": 2,
+          "title": "Alert Creation Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+          "targets": [
+            {
+              "expr": "rate(alerting_alerts_created_total[5m])",
+              "refId": "A",
+              "legendFormat": "Alerts/sec",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "fillOpacity": 10
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Circuit Breaker State",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+          "targets": [
+            {
+              "expr": "alerting_circuit_breaker_state",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "options": {
+            "colorMode": "background",
+            "textMode": "value_and_name"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "value": "0", "text": "CLOSED"},
+                {"type": "value", "value": "1", "text": "OPEN"}
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": null, "color": "green"},
+                  {"value": 1, "color": "red"}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Slack Notification Success Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "rate(slack_notifications_sent_total{status=\"success\"}[5m]) / rate(slack_notifications_sent_total[5m]) * 100",
+              "refId": "A",
+              "legendFormat": "Success Rate %",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "API Processing Latency (p95)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, rate(alerting_alert_processing_duration_seconds_bucket[5m]))",
+              "refId": "A",
+              "legendFormat": "p95 latency",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line"
+              }
+            }
+          }
+        }
+      ]
     }
