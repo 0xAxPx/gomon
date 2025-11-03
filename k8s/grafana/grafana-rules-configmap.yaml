@@ -28,8 +28,8 @@ data:
             execErrState: Error
             for: 2m
             annotations:
-              summary: "Alert creation rate is unusually high ({{ $values.A.Value }} alerts/sec)"
-              description: "More than 3 alerts per minute are being created. This may indicate widespread pod failures in the cluster."
+              summary: "Alert creation rate is unusually high"
+              description: "More than 3 alerts per minute are being created. This may indicate widespread pod failures."
             labels:
               severity: warning
               component: alerting-service
@@ -51,7 +51,7 @@ data:
             for: 1m
             annotations:
               summary: "Circuit breaker is OPEN - Slack notifications blocked"
-              description: "The circuit breaker has opened due to repeated Slack API failures. Check Slack webhook configuration and API status."
+              description: "The circuit breaker has opened due to repeated Slack API failures. Check Slack webhook configuration."
             labels:
               severity: critical
               component: alerting-service
