@@ -10,8 +10,9 @@ data:
       - name: VictoriaMetrics
         type: prometheus
         access: proxy
-        url: http://victoria.local
+        url: http://victoria-metrics:8428
         isDefault: true
         editable: false
         jsonData:
           timeInterval: "30s"
+        uid: victoriametrics
