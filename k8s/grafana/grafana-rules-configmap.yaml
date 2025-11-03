@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-rules-provisioning
+  namespace: monitoring
+data:
+  alert-rules.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: gomon-alerting-health
+        folder: GoMon Monitoring
+        interval: 1m
+        rules:
+          - uid: high-alert-rate
+            title: High Alert Creation Rate
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: victoriametrics
+                model:
+                  expr: rate(alerting_alerts_created_total[5m]) > 0.05
+                  refId: A
+            noDataState: NoData
+            execErrState: Error
+            for: 2m
+            annotations:
+              summary: "Alert creation rate is unusually high ({{ $values.A.Value }} alerts/sec)"
+              description: "More than 3 alerts per minute are being created. This may indicate widespread pod failures in the cluster."
+            labels:
+              severity: warning
+              component: alerting-service
+          
+          - uid: circuit-breaker-open
+            title: Slack Circuit Breaker Opened
+            condition: A
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 60
+                  to: 0
+                datasourceUid: victoriametrics
+                model:
+                  expr: alerting_circuit_breaker_state == 1
+                  refId: A
+            noDataState: NoData
+            execErrState: Error
+            for: 1m
+            annotations:
+              summary: "Circuit breaker is OPEN - Slack notifications blocked"
+              description: "The circuit breaker has opened due to repeated Slack API failures. Check Slack webhook configuration and API status."
+            labels:
+              severity: critical
+              component: alerting-service

@@ -29,6 +29,8 @@ spec:
           volumeMounts:
             - name: grafana-storage
               mountPath: /var/lib/grafana
+            - name: grafana-datasource-provisioning
+              mountPath: /etc/grafana/provisioning/datasources
             - name: grafana-alerting-provisioning
               mountPath: /etc/grafana/provisioning/alerting
           resources:
@@ -40,7 +42,11 @@ spec:
               cpu: "200m"
       volumes:
         - name: grafana-storage
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: grafana-pvc
+        - name: grafana-datasource-provisioning
+          configMap:
+            name: grafana-datasource-provisioning
         - name: grafana-alerting-provisioning
           configMap:
             name: grafana-alerting-provisioning
