@@ -20,9 +20,17 @@ spec:
           image: grafana/grafana:latest
           ports:
             - containerPort: 3000
+          env:
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-slack-secret
+                  key: webhook-url
           volumeMounts:
             - name: grafana-storage
               mountPath: /var/lib/grafana
+            - name: grafana-alerting-provisioning
+              mountPath: /etc/grafana/provisioning/alerting
           resources:
             requests:
               memory: "256Mi"
@@ -33,6 +41,9 @@ spec:
       volumes:
         - name: grafana-storage
           emptyDir: {}
+        - name: grafana-alerting-provisioning
+          configMap:
+            name: grafana-alerting-provisioning
 
 ---
 apiVersion: v1
@@ -47,4 +58,4 @@ spec:
   ports:
     - protocol: TCP
       port: 3000      
-      targetPort: 3000 
+      targetPort: 3000
