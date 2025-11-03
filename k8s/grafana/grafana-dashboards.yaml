@@ -93,13 +93,28 @@ data:
           ],
           "options": {
             "colorMode": "background",
-            "textMode": "value_and_name"
+            "textMode": "value_and_name",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"]
+            }
           },
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                {"type": "value", "value": "0", "text": "CLOSED"},
-                {"type": "value", "value": "1", "text": "OPEN"}
+                {
+                  "options": {
+                    "0": {
+                      "text": "CLOSED",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "OPEN",
+                      "color": "red"
+                    }
+                  },
+                  "type": "value"
+                }
               ],
               "thresholds": {
                 "mode": "absolute",
