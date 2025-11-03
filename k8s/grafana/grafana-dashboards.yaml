@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+data:
+  gomon-monitoring.json: |
+    {
+      "dashboard": {
+        "title": "GoMon Alerting Service Monitoring",
+        "tags": ["gomon", "alerting", "monitoring"],
+        "timezone": "browser",
+        "schemaVersion": 16,
+        "version": 1,
+        "refresh": "10s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Active Alerts",
+            "type": "stat",
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "alerting_active_alerts",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "area",
+              "orientation": "auto"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": 0, "color": "green"},
+                    {"value": 5, "color": "yellow"},
+                    {"value": 10, "color": "red"}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Alert Creation Rate",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+            "targets": [
+              {
+                "expr": "rate(alerting_alerts_created_total[5m])",
+                "refId": "A",
+                "legendFormat": "Alerts/sec"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Circuit Breaker State",
+            "type": "stat",
+            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+            "targets": [
+              {
+                "expr": "alerting_circuit_breaker_state",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "colorMode": "background"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [
+                  {"value": 0, "text": "CLOSED"},
+                  {"value": 1, "text": "OPEN"}
+                ],
+                "thresholds": {
+                  "steps": [
+                    {"value": 0, "color": "green"},
+                    {"value": 1, "color": "red"}
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "overwrite": true
+    }
