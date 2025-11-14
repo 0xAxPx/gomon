@@ -26,17 +26,16 @@ import (
 	"github.com/uber/jaeger-lib/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Init Metrics
 func initMetrics() {
-	// Register Go runtime metrics (GC, memory, goroutines, etc.)
-	prometheus.MustRegister(prometheus.NewGoCollector())
-
-	// Register process metrics (CPU, memory, file descriptors)
-	prometheus.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-
+	// Register Go runtime metrics collector
+	prometheus.MustRegister(collectors.NewGoCollector())
+	// Process metrics (CPU, memory etc)
+	prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	log.Println("Prometheus metrics registered successfully")
 }
 
