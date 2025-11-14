@@ -27,6 +27,10 @@ spec:
       - name: aggregator
         image: ragazzo271985/aggregator:20250913-ae81b95
         imagePullPolicy: Always
+        ports:
+        - containerPorts: 2113
+          name: metrics
+          protocol: TCP
         resources:
           requests:
             cpu: 100m
@@ -51,6 +55,8 @@ spec:
           value: "http://victoria-metrics:8428/api/v1/import"
         - name: LOG_FILE
           value: "/var/log/aggregator.log"
+        - name: METRICS_PORTS
+          value: "2113"
         volumeMounts:
         - name: agg-logs
           mountPath: /var/log
@@ -108,3 +114,20 @@ spec:
         emptyDir: {}
       imagePullSecrets:
       - name: regcred
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gomon-aggregator-metrics
+  namespace: monitoring
+  labels:
+    app: aggregator
+spec:
+  ports:
+  - port: 2113
+    targetPort: 2113
+    protocol: TCP
+    name: metrics
+  selector:
+    app: aggregator
+  type: ClusterIP

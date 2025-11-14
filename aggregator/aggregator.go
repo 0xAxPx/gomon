@@ -24,7 +24,33 @@ import (
 	"github.com/uber/jaeger-client-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	"github.com/uber/jaeger-lib/metrics"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+// Init Metrics
+func initMetrics() {
+	// Register Go runtime metrics collector
+	prometheus.MustRegister(collectors.NewGoCollector())
+	// Process metrics (CPU, memory etc)
+	prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	log.Println("Prometheus metrics registered successfully")
+}
+
+func startMetricServer(port string) {
+	http.Handle("/metrics", promhttp.Handler())
+
+	go func() {
+		log.Printf("Starting metrics server on :%s", port)
+		log.Printf("Metrics available at: http://localhost:%s/metrics", port)
+
+		if err := http.ListenAndServe(":"+port, nil); err != nil {
+			log.Fatalf("Failed to start metrics server: %v", err)
+		}
+	}()
+}
 
 // Jaeger
 func initJaeger() (opentracing.Tracer, func(), error) {
@@ -328,6 +354,13 @@ func main() {
 	}()
 
 	logger.Println("AGGREGATOR MAIN STARTED")
+
+	initMetrics()
+	metricsPort := os.Getenv("METRICS_PORT")
+	if metricsPort == "" {
+		metricsPort = "2113"
+	}
+	startMetricServer(metricsPort)
 
 	err := StartAggregator(logger)
 	if err != nil {
