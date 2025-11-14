@@ -7,7 +7,7 @@ import (
 	"gomon/alerting/internal/handlers"
 
 	"github.com/gin-gonic/gin"
-
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -19,6 +19,11 @@ type Server struct {
 }
 
 func New(alertHandler *handlers.AlertHandler, healthHandler *handlers.HealthHandler, port int) *Server {
+	// Register Go runtime metrics collector
+	prometheus.MustRegister(prometheus.NewGoCollector())
+	// Process metrics (CPU, memory etc)
+	prometheus.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+
 	return &Server{
 		router:        gin.Default(),
 		alertHandler:  alertHandler,

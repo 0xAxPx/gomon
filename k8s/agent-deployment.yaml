@@ -16,6 +16,10 @@ spec:
       containers:
       - name: agent
         image: ragazzo271985/gomon-agent:20250913-ae81b95
+        ports:
+        - containerPorts: 2112
+          name: metrics
+          protocol: TCP
         env:
         - name: KAFKA_BROKERS
           value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092,kafka-2.kafka.monitoring.svc.cluster.local:9092"
@@ -25,6 +29,8 @@ spec:
           value: "30000"
         - name: KAFKA_RETRIES
           value: "5"
+        - name: METRICS_PORTS
+          value: "2112"
         # Add volume mount for logs
         volumeMounts:
         - name: agent-logs
@@ -46,3 +52,20 @@ spec:
       volumes:
       - name: agent-logs
         emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gomon-agent-metrics
+  namespace: monitoring
+  labels:
+    app: agent
+spec:
+  ports:
+  - port: 2112
+    targetPort: 2112
+    protocol: TCP
+    name: metrics
+  selector:
+    app: agent
+  type: ClusterIP
