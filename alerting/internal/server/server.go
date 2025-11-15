@@ -11,6 +11,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"log"
+	"sync"
 )
 
 type Server struct {
@@ -20,11 +23,15 @@ type Server struct {
 	port          int
 }
 
+var registerMetricsOnce sync.Once
+
 func New(alertHandler *handlers.AlertHandler, healthHandler *handlers.HealthHandler, port int) *Server {
-	// Register Go runtime metrics collector
-	prometheus.MustRegister(collectors.NewGoCollector())
-	// Process metrics (CPU, memory etc)
-	prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	registerMetricsOnce.Do(func() {
+		// This code will only run ONCE, even if initMetrics() is called multiple times
+		prometheus.MustRegister(collectors.NewGoCollector())
+		prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+		log.Println("Prometheus metrics registered successfully")
+	})
 
 	return &Server{
 		router:        gin.Default(),
