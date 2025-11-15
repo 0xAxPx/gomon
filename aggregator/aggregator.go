@@ -25,18 +25,23 @@ import (
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	"github.com/uber/jaeger-lib/metrics"
 
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+var registerMetricsOnce sync.Once
+
 // Init Metrics
 func initMetrics() {
-	// Register Go runtime metrics collector
-	prometheus.MustRegister(collectors.NewGoCollector())
-	// Process metrics (CPU, memory etc)
-	prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	log.Println("Prometheus metrics registered successfully")
+	registerMetricsOnce.Do(func() {
+		// This code will only run ONCE, even if initMetrics() is called multiple times
+		prometheus.MustRegister(collectors.NewGoCollector())
+		prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+		log.Println("Prometheus metrics registered successfully")
+	})
 }
 
 func startMetricServer(port string) {
