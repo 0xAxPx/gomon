@@ -62,7 +62,78 @@ resource "kubernetes_persistent_volume_claim" "victoria_metrics_data" {
   }
 }
 
-# Create VictoriaMetrics Deployment
+# ============================================================================
+# NEW: VictoriaMetrics Scrape Configuration
+# ============================================================================
+resource "kubernetes_config_map" "victoria_metrics_scrape_config" {
+  metadata {
+    name      = "victoria-metrics-scrape-config"
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "victoria-metrics"
+      tier      = "configuration"
+    })
+  }
+
+  data = {
+    "scrape.yml" = <<-EOF
+      global:
+        scrape_interval: 15s
+        scrape_timeout: 10s
+        external_labels:
+          cluster: 'gomon-dev'
+          environment: 'development'
+      
+      scrape_configs:
+      # GoMon Agent - Go Runtime Metrics
+      - job_name: 'gomon-agent'
+        static_configs:
+        - targets: ['gomon-agent-metrics.monitoring.svc.cluster.local:2112']
+          labels:
+            service: 'agent'
+            component: 'gomon'
+            tier: 'metrics-collection'
+        metrics_path: '/metrics'
+        scrape_interval: 15s
+        scrape_timeout: 10s
+      
+      # GoMon Aggregator - Go Runtime Metrics
+      - job_name: 'gomon-aggregator'
+        static_configs:
+        - targets: ['gomon-aggregator-metrics.monitoring.svc.cluster.local:2113']
+          labels:
+            service: 'aggregator'
+            component: 'gomon'
+            tier: 'metrics-processing'
+        metrics_path: '/metrics'
+        scrape_interval: 15s
+        scrape_timeout: 10s
+      
+      # GoMon Alerting Service - Go Runtime & Custom Metrics
+      - job_name: 'gomon-alerting'
+        static_configs:
+        - targets: ['alerting.monitoring.svc.cluster.local:8099']
+          labels:
+            service: 'alerting'
+            component: 'gomon'
+            tier: 'alerting'
+        metrics_path: '/metrics'
+        scrape_interval: 15s
+        scrape_timeout: 10s
+      
+      # VictoriaMetrics Self-Monitoring
+      - job_name: 'victoria-metrics'
+        static_configs:
+        - targets: ['localhost:8428']
+          labels:
+            service: 'victoria-metrics'
+            component: 'observability'
+        metrics_path: '/metrics'
+        scrape_interval: 30s
+    EOF
+  }
+}
+
 resource "kubernetes_deployment" "victoria_metrics" {
   metadata {
     name      = "victoria-metrics"
@@ -102,7 +173,10 @@ resource "kubernetes_deployment" "victoria_metrics" {
             container_port = 8428
           }
           
-          args = ["-storageDataPath=/var/lib/victoria-metrics", "-promscrape.config=/etc/vm/scrape.yml"]
+          args = [
+            "-storageDataPath=/var/lib/victoria-metrics",
+            "-promscrape.config=/etc/vm/scrape.yml"
+          ]
           
           volume_mount {
             name       = "vm-data"
@@ -122,7 +196,7 @@ resource "kubernetes_deployment" "victoria_metrics" {
             }
             limits = {
               cpu    = "1000m"
-              memory = "256Mi"
+              memory = "512Mi"
             }
           }
         }
@@ -167,50 +241,6 @@ resource "kubernetes_service" "victoria_metrics" {
     selector = {
       app = "victoria-metrics"
     }
-  }
-}
-
-# VictoriaMetrics Scrape Configuration
-resource "kubernetes_config_map" "victoria_metrics_scrape_config" {
-  metadata {
-    name      = "victoria-metrics-scrape-config"
-    namespace = local.namespace
-    labels = merge(local.common_labels, {
-      component = "victoria-metrics"
-      tier      = "configuration"
-    })
-  }
-
-  data = {
-    "scrape.yml" = <<-EOF
-      global:
-        scrape_interval: 30s
-        scrape_timeout: 10s
-        external_labels:
-          cluster: 'gomon-dev'
-          environment: 'development'
-      
-      scrape_configs:
-      # Alerting Service Metrics
-      - job_name: 'alerting-service'
-        static_configs:
-        - targets: ['alerting.monitoring.svc.cluster.local:8099']
-          labels:
-            service: 'alerting'
-            component: 'alerting-service'
-        metrics_path: '/metrics'
-        scrape_interval: 30s
-        scrape_timeout: 10s
-      
-      # VictoriaMetrics Self-Monitoring
-      - job_name: 'victoria-metrics'
-        static_configs:
-        - targets: ['localhost:8428']
-          labels:
-            service: 'victoria-metrics'
-        metrics_path: '/metrics'
-        scrape_interval: 30s
-    EOF
   }
 }
 

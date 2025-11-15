@@ -41,7 +41,6 @@ func initMetrics() {
 	registerMetricsOnce.Do(func() {
 		// This code will only run ONCE, even if initMetrics() is called multiple times
 		prometheus.MustRegister(collectors.NewGoCollector())
-		prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 		log.Println("Prometheus metrics registered successfully")
 	})
 }
