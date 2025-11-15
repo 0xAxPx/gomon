@@ -28,7 +28,7 @@ spec:
         image: ragazzo271985/aggregator:20251114-b5ae893
         imagePullPolicy: Always
         ports:
-        - containerPorts: 2113
+        - containerPort: 2113
           name: metrics
           protocol: TCP
         resources:
@@ -55,7 +55,7 @@ spec:
           value: "http://victoria-metrics:8428/api/v1/import"
         - name: LOG_FILE
           value: "/var/log/aggregator.log"
-        - name: METRICS_PORTS
+        - name: METRICS_PORT
           value: "2113"
         volumeMounts:
         - name: agg-logs
