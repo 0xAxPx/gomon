@@ -17,7 +17,7 @@ spec:
       - name: agent
         image: ragazzo271985/gomon-agent:20251114-b5ae893
         ports:
-        - containerPorts: 2112
+        - containerPort: 2112
           name: metrics
           protocol: TCP
         env:
@@ -29,7 +29,7 @@ spec:
           value: "30000"
         - name: KAFKA_RETRIES
           value: "5"
-        - name: METRICS_PORTS
+        - name: METRICS_PORT
           value: "2112"
         # Add volume mount for logs
         volumeMounts:
