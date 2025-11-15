@@ -1,0 +1,579 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-gomon-gc-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    app: grafana
+    component: dashboard
+data:
+  gomon-gc-metrics.json: |
+    {
+      "title": "GoMon - Go Runtime & GC Metrics",
+      "tags": ["gomon", "go", "gc", "performance", "runtime"],
+      "timezone": "browser",
+      "editable": true,
+      "graphTooltip": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "GC Pause Duration (p99, p95, p50)",
+          "type": "graph",
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, rate(go_gc_duration_seconds_bucket{job=~\"gomon.*\"}[5m])) * 1000",
+              "legendFormat": "{{job}} - p99",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.95, rate(go_gc_duration_seconds_bucket{job=~\"gomon.*\"}[5m])) * 1000",
+              "legendFormat": "{{job}} - p95",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.50, rate(go_gc_duration_seconds_bucket{job=~\"gomon.*\"}[5m])) * 1000",
+              "legendFormat": "{{job}} - p50",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "ms",
+              "label": "Pause Duration"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "nullPointMode": "null",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 2,
+          "title": "GC Frequency (cycles/min)",
+          "type": "graph",
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "rate(go_gc_duration_seconds_count{job=~\"gomon.*\"}[5m]) * 60",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "short",
+              "label": "GC cycles/min"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 3,
+          "title": "Heap Memory Usage",
+          "type": "graph",
+          "gridPos": {
+            "x": 0,
+            "y": 8,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "go_memstats_heap_inuse_bytes{job=~\"gomon.*\"} / 1024 / 1024",
+              "legendFormat": "{{job}} - Heap In Use",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            },
+            {
+              "expr": "go_memstats_heap_alloc_bytes{job=~\"gomon.*\"} / 1024 / 1024",
+              "legendFormat": "{{job}} - Heap Allocated",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            },
+            {
+              "expr": "go_memstats_heap_idle_bytes{job=~\"gomon.*\"} / 1024 / 1024",
+              "legendFormat": "{{job}} - Heap Idle",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "mbytes",
+              "label": "Memory"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 4,
+          "title": "Goroutine Count",
+          "type": "graph",
+          "gridPos": {
+            "x": 12,
+            "y": 8,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "go_goroutines{job=~\"gomon.*\"}",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "short",
+              "label": "Goroutines"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 5,
+          "title": "Memory Allocation Rate",
+          "type": "graph",
+          "gridPos": {
+            "x": 0,
+            "y": 16,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "rate(go_memstats_alloc_bytes_total{job=~\"gomon.*\"}[1m]) / 1024 / 1024",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "MBs",
+              "label": "Allocation Rate"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 6,
+          "title": "GC CPU Fraction (%)",
+          "type": "graph",
+          "gridPos": {
+            "x": 12,
+            "y": 16,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "go_memstats_gc_cpu_fraction{job=~\"gomon.*\"} * 100",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "percent",
+              "label": "CPU %",
+              "max": 100,
+              "min": 0
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          },
+          "alert": {
+            "conditions": [
+              {
+                "evaluator": {
+                  "params": [5],
+                  "type": "gt"
+                },
+                "operator": {
+                  "type": "and"
+                },
+                "query": {
+                  "params": ["A", "5m", "now"]
+                },
+                "reducer": {
+                  "params": [],
+                  "type": "avg"
+                },
+                "type": "query"
+              }
+            ],
+            "name": "High GC CPU Usage",
+            "message": "GC CPU fraction exceeded 5% threshold"
+          }
+        },
+        {
+          "id": 7,
+          "title": "Process CPU Usage",
+          "type": "graph",
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "rate(process_cpu_seconds_total{job=~\"gomon.*\"}[1m]) * 100",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "percent",
+              "label": "CPU %"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 8,
+          "title": "Process Memory (RSS)",
+          "type": "graph",
+          "gridPos": {
+            "x": 12,
+            "y": 24,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "process_resident_memory_bytes{job=~\"gomon.*\"} / 1024 / 1024",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "mbytes",
+              "label": "Memory"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 9,
+          "title": "Stack Memory Usage",
+          "type": "graph",
+          "gridPos": {
+            "x": 0,
+            "y": 32,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "go_memstats_stack_inuse_bytes{job=~\"gomon.*\"} / 1024 / 1024",
+              "legendFormat": "{{job}} - Stack In Use",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            },
+            {
+              "expr": "go_memstats_stack_sys_bytes{job=~\"gomon.*\"} / 1024 / 1024",
+              "legendFormat": "{{job}} - Stack System",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "mbytes",
+              "label": "Memory"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        },
+        {
+          "id": 10,
+          "title": "Open File Descriptors",
+          "type": "graph",
+          "gridPos": {
+            "x": 12,
+            "y": 32,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "expr": "process_open_fds{job=~\"gomon.*\"}",
+              "legendFormat": "{{job}} - Open",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            },
+            {
+              "expr": "process_max_fds{job=~\"gomon.*\"}",
+              "legendFormat": "{{job}} - Max",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "victoriametrics"
+              }
+            }
+          ],
+          "yaxes": [
+            {
+              "format": "short",
+              "label": "File Descriptors"
+            },
+            {
+              "format": "short"
+            }
+          ],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 2,
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "legend": {
+            "show": true,
+            "values": true,
+            "current": true,
+            "max": true,
+            "avg": true
+          }
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "datasource",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {
+              "text": "VictoriaMetrics",
+              "value": "VictoriaMetrics"
+            }
+          }
+        ]
+      },
+      "schemaVersion": 39,
+      "version": 1
+    }
