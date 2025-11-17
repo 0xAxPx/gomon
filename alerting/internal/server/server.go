@@ -7,13 +7,8 @@ import (
 	"gomon/alerting/internal/handlers"
 
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"log"
-	"sync"
 )
 
 type Server struct {
@@ -23,15 +18,7 @@ type Server struct {
 	port          int
 }
 
-var registerMetricsOnce sync.Once
-
 func New(alertHandler *handlers.AlertHandler, healthHandler *handlers.HealthHandler, port int) *Server {
-	registerMetricsOnce.Do(func() {
-		// This code will only run ONCE, even if initMetrics() is called multiple times
-		prometheus.MustRegister(collectors.NewGoCollector())
-		prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-		log.Println("Prometheus metrics registered successfully")
-	})
 
 	return &Server{
 		router:        gin.Default(),

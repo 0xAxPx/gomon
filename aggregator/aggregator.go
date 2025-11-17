@@ -25,24 +25,8 @@ import (
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	"github.com/uber/jaeger-lib/metrics"
 
-	"sync"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
-
-var registerMetricsOnce sync.Once
-
-// Init Metrics
-func initMetrics() {
-	registerMetricsOnce.Do(func() {
-		// This code will only run ONCE, even if initMetrics() is called multiple times
-		prometheus.MustRegister(collectors.NewGoCollector())
-		prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-		log.Println("Prometheus metrics registered successfully")
-	})
-}
 
 func startMetricServer(port string) {
 	http.Handle("/metrics", promhttp.Handler())
@@ -360,7 +344,6 @@ func main() {
 
 	logger.Println("AGGREGATOR MAIN STARTED")
 
-	initMetrics()
 	metricsPort := os.Getenv("METRICS_PORT")
 	if metricsPort == "" {
 		metricsPort = "2113"
