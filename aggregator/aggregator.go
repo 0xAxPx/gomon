@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,6 +29,32 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+const numberOfWorkers = 4
+
+var victoriaMetricsURL string
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
+
+type Job struct {
+	data         []byte
+	kafkaRecTime time.Time
+}
+
+func init() {
+	victoriaMetricsURL = os.Getenv("VICTORIA_METRICS_URL")
+	if victoriaMetricsURL == "" {
+		log.Fatal("VICTORIA_METRICS_URL environment variable is not set")
+	}
+}
+
+// Expose metrics for VM
 func startMetricServer(port string) {
 	http.Handle("/metrics", promhttp.Handler())
 
@@ -94,7 +121,6 @@ func initLogger() *log.Logger {
 }
 
 func StartAggregator(logger *log.Logger) error {
-
 	// init jaeger
 	tracer, closer, err := initJaeger()
 	if err != nil {
@@ -122,28 +148,62 @@ func StartAggregator(logger *log.Logger) error {
 	})
 	defer reader.Close()
 
+	// buffered channel
+	jobs := make(chan Job, 10*numberOfWorkers)
+
+	// waiting group to track workers
+	var wg sync.WaitGroup
+
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start workers
+	for i := 0; i < numberOfWorkers; i++ {
+		wg.Add(1)
+		go worker(ctx, i, jobs, logger, tracer, &wg)
+	}
+
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	for {
-		select {
-		case <-sigs:
-			logger.Println("Received termination signal, stopping aggregator...")
-			return nil
-		default:
-			kafkaReceiveStart := time.Now().UTC()
-			msg, err := reader.ReadMessage(context.Background())
-			if err != nil {
-				logger.Printf("Could not read message: %v", err)
-				continue
-			}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				kafkaReceiveStart := time.Now().UTC()
+				msg, err := reader.ReadMessage(ctx)
+				if err != nil {
+					if ctx.Err() != nil {
+						return // Context cancelled, exit gracefully
+					}
+					logger.Printf("Could not read message: %v", err)
+					continue
+				}
 
-			err = processAndSendMetrics(msg.Value, logger, kafkaReceiveStart, tracer)
-			if err != nil {
-				logger.Printf("Error processing message: %v", err)
+				// Dispatch to worker pool
+				jobs <- Job{
+					data:         msg.Value,
+					kafkaRecTime: kafkaReceiveStart,
+				}
 			}
 		}
-	}
+	}()
+
+	// Wait for shutdown signal
+	<-sigs
+	logger.Println("Received termination signal, stopping aggregator...")
+
+	// Graceful shutdown
+	cancel()    // Signal all goroutines to stop
+	close(jobs) // Close job channel
+	wg.Wait()   // Wait for workers to finish
+
+	logger.Println("All workers stopped, aggregator shutdown complete")
+	return nil
+
 }
 
 // processAndSendMetrics processes and sends separate metrics to VictoriaMetrics
@@ -294,26 +354,19 @@ func createMetricData(metricName string, value float64, timestampStr string, cor
 
 // sendToVictoriaMetrics sends data to VictoriaMetrics
 func sendToVictoriaMetrics(data map[string]interface{}, logger *log.Logger) error {
-
-	victoriaMetrics := os.Getenv("VICTORIA_METRICS_URL")
-	if victoriaMetrics == "" {
-		logger.Fatal("VICTORIA_METRICS_URL environment variable is not set")
-	}
-
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("could not marshal JSON: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", victoriaMetrics, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", victoriaMetricsURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("could not create HTTP request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("could not send HTTP request: %v", err)
 	}
@@ -353,5 +406,30 @@ func main() {
 	err := StartAggregator(logger)
 	if err != nil {
 		logger.Fatal("Failed to start aggregator:", err)
+	}
+}
+
+func worker(ctx context.Context, id int, jobs <-chan Job, logger *log.Logger, tracer opentracing.Tracer, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	logger.Printf("Worker %d started", id)
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Printf("Worker %d shutting down", id)
+			return
+		case job, ok := <-jobs:
+			if !ok {
+				// Channel closed
+				logger.Printf("Worker %d: job channel closed", id)
+				return
+			}
+
+			err := processAndSendMetrics(job.data, logger, job.kafkaRecTime, tracer)
+			if err != nil {
+				logger.Printf("Worker %d: error processing message: %v", id, err)
+			}
+		}
 	}
 }
