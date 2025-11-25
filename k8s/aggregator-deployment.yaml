@@ -61,11 +61,14 @@ spec:
         - name: agg-logs
           mountPath: /var/log
         livenessProbe:
-          exec:
-            command:
-            - pgrep
-            - -f
-            - aggregator
+          #exec:
+          #  command:
+          #  - pgrep
+          #  - -f
+          #  - aggregator
+          httpGet:
+            path: /health
+            port: "metrics"
           initialDelaySeconds: 60
           periodSeconds: 30
           failureThreshold: 3
