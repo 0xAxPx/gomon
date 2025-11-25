@@ -112,8 +112,6 @@ spec:
           name: filebeat-aggregator-config
       - name: filebeat-data
         emptyDir: {}
-      imagePullSecrets:
-      - name: regcred
 ---
 apiVersion: v1
 kind: Service
