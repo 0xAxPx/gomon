@@ -68,6 +68,14 @@ func startMetricServer(port string) {
 	}()
 }
 
+// Liveness probe
+func livenessProbeCheck() {
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("alive"))
+	})
+}
+
 // Jaeger
 func initJaeger() (opentracing.Tracer, func(), error) {
 	cfg := jaegercfg.Configuration{
@@ -402,6 +410,10 @@ func main() {
 		metricsPort = "2113"
 	}
 	startMetricServer(metricsPort)
+
+	//liveness endpoint
+	logger.Println("Acivate Liveness Probe")
+	livenessProbeCheck()
 
 	err := StartAggregator(logger)
 	if err != nil {
