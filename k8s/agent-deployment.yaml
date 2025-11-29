@@ -1,10 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: agent
   namespace: monitoring
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: agent
@@ -31,7 +30,6 @@ spec:
           value: "5"
         - name: METRICS_PORT
           value: "2112"
-        # Add volume mount for logs
         volumeMounts:
         - name: agent-logs
           mountPath: /var/log
