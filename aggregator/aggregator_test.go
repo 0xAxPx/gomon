@@ -142,6 +142,6 @@ func TestVMSerialization(t *testing.T) {
 	if decoded[0]["metric"] == nil {
 		t.Error("Missing 'metric' field in JSON")
 	}
-	fmt.Printf("JSON decoded v", decoded)
+	fmt.Printf("JSON decoded %v", decoded)
 
 }
