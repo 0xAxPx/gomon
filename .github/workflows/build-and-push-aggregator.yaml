@@ -8,7 +8,18 @@ on:
       - 'Dockerfile.aggregator'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      - name: Run tests for Aggregator
+        run: go test ./aggregator/...
   build:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
