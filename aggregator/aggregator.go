@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -45,13 +44,6 @@ var httpClient = &http.Client{
 type Job struct {
 	data         []byte
 	kafkaRecTime time.Time
-}
-
-func init() {
-	victoriaMetricsURL = os.Getenv("VICTORIA_METRICS_URL")
-	if victoriaMetricsURL == "" {
-		log.Fatal("VICTORIA_METRICS_URL environment variable is not set")
-	}
 }
 
 // Expose metrics for VM
@@ -262,21 +254,21 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger, kafkaReceiveSta
 
 	// CPU metric
 	if metric.CpuUsagePercent > 0 {
-		data := createMetricData("cpu_usage_percent", float64(metric.CpuUsagePercent), metric.Timestamp, correlationID, hostname)
+		data := CreateMetricData("cpu_usage_percent", float64(metric.CpuUsagePercent), metric.Timestamp, correlationID, hostname)
 		metricsData = append(metricsData, data)
 		metricsProcessed++
 	}
 
 	// Memory metric
 	if metric.MemoryUsedPercent > 0 {
-		data := createMetricData("mem_usage_percent", float64(metric.MemoryUsedPercent), metric.Timestamp, correlationID, hostname)
+		data := CreateMetricData("mem_usage_percent", float64(metric.MemoryUsedPercent), metric.Timestamp, correlationID, hostname)
 		metricsData = append(metricsData, data)
 		metricsProcessed++
 	}
 
 	// Disk used GB metric
 	if metric.MemoryUsedGb > 0 {
-		data := createMetricData("dsk_used_gb", float64(metric.MemoryUsedGb), metric.Timestamp, correlationID, hostname)
+		data := CreateMetricData("dsk_used_gb", float64(metric.MemoryUsedGb), metric.Timestamp, correlationID, hostname)
 		metricsData = append(metricsData, data)
 		metricsProcessed++
 	}
@@ -284,7 +276,7 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger, kafkaReceiveSta
 	// Disk stats
 	for _, disk := range metric.DiskStats {
 		if disk != nil {
-			data := createMetricData("disk_used_percent", float64(disk.UsedPercent), metric.Timestamp, correlationID, hostname)
+			data := CreateMetricData("disk_used_percent", float64(disk.UsedPercent), metric.Timestamp, correlationID, hostname)
 			metricsData = append(metricsData, data)
 			metricsProcessed++
 		}
@@ -294,11 +286,11 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger, kafkaReceiveSta
 	for _, net := range metric.NetStats {
 		if net != nil {
 			// Bytes received
-			data1 := createMetricData("int_bytes_recv_mb", float64(net.BytesReceived>>20), metric.Timestamp, correlationID, hostname)
+			data1 := CreateMetricData("int_bytes_recv_mb", float64(net.BytesReceived>>20), metric.Timestamp, correlationID, hostname)
 			metricsData = append(metricsData, data1)
 
 			// Bytes sent
-			data2 := createMetricData("int_bytes_sent_mb", float64(net.BytesSent>>20), metric.Timestamp, correlationID, hostname)
+			data2 := CreateMetricData("int_bytes_sent_mb", float64(net.BytesSent>>20), metric.Timestamp, correlationID, hostname)
 			metricsData = append(metricsData, data2)
 			metricsProcessed += 2
 		}
@@ -344,22 +336,6 @@ func processAndSendMetrics(protoData []byte, logger *log.Logger, kafkaReceiveSta
 	return nil
 }
 
-// Helper function to create metric data structure
-func createMetricData(metricName string, value float64, timestampStr string, correlationID string, hostname string) map[string]interface{} {
-	timestamp, _ := strconv.ParseInt(timestampStr, 10, 64)
-
-	return map[string]interface{}{
-		"metric": map[string]string{
-			"__name__":       metricName,
-			"job":            "metrics-aggregator",
-			"instance":       hostname + "-agg",
-			"correlation_id": correlationID,
-		},
-		"values":     []float64{value},
-		"timestamps": []int64{timestamp * 1000},
-	}
-}
-
 // sendToVictoriaMetrics sends data to VictoriaMetrics
 func sendToVictoriaMetrics(data map[string]interface{}, logger *log.Logger) error {
 	jsonData, err := json.Marshal(data)
@@ -396,6 +372,10 @@ func sendToVictoriaMetrics(data map[string]interface{}, logger *log.Logger) erro
 }
 
 func main() {
+	victoriaMetricsURL = os.Getenv("VICTORIA_METRICS_URL")
+	if victoriaMetricsURL == "" {
+		log.Fatal("VICTORIA_METRICS_URL environment variable is not set")
+	}
 	logger := initLogger()
 	defer func() {
 		if f, ok := logger.Writer().(*os.File); ok {
