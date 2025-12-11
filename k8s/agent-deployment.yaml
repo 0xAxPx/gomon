@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: agent
-        image: ragazzo271985/gomon-agent:20251207-8998195
+        image: ragazzo271985/gomon-agent:20251211-a0fa613
         ports:
         - containerPort: 2112
           name: metrics
