@@ -1,0 +1,88 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  pull_request:
+    branches: [main]
+    paths:
+      - 'integration/**'
+      - 'agent/**'
+      - 'aggregator/**'
+      - 'kafka/**'
+      - 'pb/**'
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build integration test image
+        run: |
+          docker build -t ${{ secrets.DOCKER_HUB_NAME }}/gomon-integration-test:${{ github.sha }} \
+            -f Dockerfile.integration .
+      
+      - name: Push test image
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          docker push ${{ secrets.DOCKER_HUB_NAME }}/gomon-integration-test:${{ github.sha }}
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+      
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+      
+      - name: Create integration test job
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: integration-test-${{ github.sha }}
+            namespace: monitoring
+          spec:
+            ttlSecondsAfterFinished: 300
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                - name: test
+                  image: ${{ secrets.DOCKER_HUB_NAME }}/gomon-integration-test:${{ github.sha }}
+                  env:
+                  - name: KAFKA_BROKERS
+                    value: "kafka-0.kafka.monitoring.svc.cluster.local:9092,kafka-1.kafka.monitoring.svc.cluster.local:9092,kafka-2.kafka.monitoring.svc.cluster.local:9092"
+                  - name: KAFKA_TOPIC
+                    value: "metrics-v4"
+          EOF
+      
+      - name: Wait for test completion
+        run: |
+          kubectl wait --for=condition=complete --timeout=300s \
+            job/integration-test-${{ github.sha }} -n monitoring || \
+            kubectl wait --for=condition=failed --timeout=10s \
+            job/integration-test-${{ github.sha }} -n monitoring
+      
+      - name: Get test logs
+        if: always()
+        run: |
+          kubectl logs job/integration-test-${{ github.sha }} -n monitoring
+      
+      - name: Check test result
+        run: |
+          STATUS=$(kubectl get job integration-test-${{ github.sha }} -n monitoring -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')
+          if [ "$STATUS" != "True" ]; then
+            echo "Integration tests failed!"
+            exit 1
+          fi
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          kubectl delete job integration-test-${{ github.sha }} -n monitoring --ignore-not-found=true

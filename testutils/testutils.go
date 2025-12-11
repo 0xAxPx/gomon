@@ -8,8 +8,42 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
+
+func CreateMetricWithOptions(opts ...MetricOption) *pb.Metric {
+	m := CreateMetric() // Default metric
+
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	return m
+}
+
+type MetricOption func(*pb.Metric)
+
+func WithCPU(cpu float32) MetricOption {
+	return func(m *pb.Metric) {
+		m.CpuUsagePercent = cpu
+	}
+}
+
+func WithMemory(total, free uint64) MetricOption {
+	return func(m *pb.Metric) {
+		m.MemoryTotalGb = total
+		m.MemoryFreeGb = free
+		m.MemoryUsedGb = total - free
+		m.MemoryUsedPercent = float32(total-free) / float32(total) * 100
+	}
+}
+
+func WithDisks(disks []*pb.DiskUsage) MetricOption {
+	return func(m *pb.Metric) {
+		m.DiskStats = disks
+	}
+}
 
 func CreateMetric() *pb.Metric {
 	now := time.Now()
@@ -46,6 +80,23 @@ func SerializeMetric(metric *pb.Metric) ([]byte, error) {
 		return nil, err
 	}
 	return dataInBinary, nil
+}
+
+func DeserializeToMetric(metrics []byte) (*pb.Metric, error) {
+	// Generate kafka message
+	kafkaMessage := &kafka.Message{
+		Value: metrics,
+	}
+
+	// Deserialize
+	var deserialized pb.Metric
+	err := proto.Unmarshal(kafkaMessage.Value, &deserialized)
+	if err != nil {
+		return nil, err
+	}
+
+	return &deserialized, nil
+
 }
 
 func GetCorrelationID() string {

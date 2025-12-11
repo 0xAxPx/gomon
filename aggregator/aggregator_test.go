@@ -2,13 +2,11 @@ package main
 
 import (
 	"fmt"
-	pb "gomon/pb"
 	"gomon/testutils"
 	"testing"
 
 	"encoding/json"
 
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -34,7 +32,7 @@ func TestKafkaDeserialization(t *testing.T) {
 	//var deserialized pb.Metric
 	//err = proto.Unmarshal(kafkaMessage.Value, &deserialized)
 
-	deserialized, err := deserializeKafka(metricProto)
+	deserialized, err := testutils.DeserializeToMetric(metricProto)
 	if err != nil {
 		t.Errorf("Deserialization failed: %v", err)
 	}
@@ -42,23 +40,6 @@ func TestKafkaDeserialization(t *testing.T) {
 	if !proto.Equal(deserialized, metric) {
 		t.Errorf("Metrics don't match")
 	}
-
-}
-
-func deserializeKafka(metrics []byte) (*pb.Metric, error) {
-	// Generate kafka message
-	kafkaMessage := &kafka.Message{
-		Value: metrics,
-	}
-
-	// Deserialize
-	var deserialized pb.Metric
-	err := proto.Unmarshal(kafkaMessage.Value, &deserialized)
-	if err != nil {
-		return nil, err
-	}
-
-	return &deserialized, nil
 
 }
 
