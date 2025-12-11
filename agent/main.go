@@ -300,14 +300,15 @@ func main() {
 	defer closer()
 
 	// Read Kafka env variables
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-	if kafkaBrokers == "" {
-		logger.Fatal("KAFKA_BROKERS environment variable is not set")
+	kafkaBrokers, err := kafka.GetKafkaBrokers()
+	if err != nil {
+		logger.Fatal(err)
 	}
-	kafkaTopic := os.Getenv("KAFKA_TOPIC")
-	if kafkaTopic == "" {
-		logger.Fatal("KAFKA_TOPIC environment variable is not set")
+	kafkaTopic, err := kafka.GetKafkaTopic()
+	if err != nil {
+		logger.Fatal(err)
 	}
+
 	logger.Printf("Kafka config - Brokers: %s, Topic: %s", kafkaBrokers, kafkaTopic)
 
 	producer := kafka.NewKafkaProducer(kafkaBrokers, kafkaTopic)
