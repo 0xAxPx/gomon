@@ -7,6 +7,10 @@ on:
       - 'agent/**'
       - 'Dockerfile.agent'
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -57,7 +61,7 @@ jobs:
 
       # STEP 3: Upload scan results to GitHub Security tab
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()  # Upload even if scan fails
         with:
           sarif_file: 'trivy-results.sarif'
