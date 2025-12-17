@@ -425,3 +425,5 @@ func worker(ctx context.Context, id int, jobs <-chan Job, logger *log.Logger, tr
 		}
 	}
 }
+
+// snyk test
