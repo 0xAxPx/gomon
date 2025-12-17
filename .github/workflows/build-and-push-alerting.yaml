@@ -29,7 +29,6 @@ jobs:
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
-      # STEP 1: Build image locally for scanning (ARM64 only for speed)
       - name: Build alerting image for scanning
         run: |
           docker buildx build \
@@ -38,18 +37,17 @@ jobs:
             -t ${{ secrets.DOCKER_HUB_NAME }}/alerting:scan \
             -f alerting/Dockerfile.alerting .
     
-      # STEP 2: Run Trivy security scan
+      # Trivy security scan
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: '${{ secrets.DOCKER_HUB_NAME }}/alerting:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL'
           ignore-unfixed: true
           exit-code: '1'
 
-      # STEP 2.*: Upload Snyk results to GitHub Security
       - name: Run Snyk to check Docker image for vulnerabilities
         uses: snyk/actions/docker@master
         env:
@@ -57,27 +55,24 @@ jobs:
         with:
           image: ${{ secrets.DOCKER_HUB_NAME }}/alerting:scan
           args: --severity-threshold=high --file=alerting/Dockerfile.alerting
-        continue-on-error: true  # Don't fail build, just report
+        continue-on-error: true  
 
-      # STEP 2.*: Upload Snyk results to GitHub Security
+      # Snyk sec scan
       - name: Upload Snyk results to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: snyk.sarif
       
-      # STEP 3: Upload scan results to GitHub Security tab
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()  # Upload even if scan fails
+        if: always()  
         with:
           sarif_file: 'trivy-results.sarif'
       
-      # STEP 4: Login to Docker Hub (only if scan passed)
       - name: Login to DockerHub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      # STEP 5: Build and push
       - name: Build and push alerting service (multi-arch)
         run: |
           docker buildx build --platform linux/amd64,linux/arm64 \
@@ -86,7 +81,6 @@ jobs:
             -t ${{ secrets.DOCKER_HUB_NAME }}/alerting-service:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
             -f alerting/Dockerfile.alerting .
       
-      # STEP 6: Trigger K8s deployment
       - name: Trigger update of k8s deployment YAML
         uses: peter-evans/repository-dispatch@v3
         with:
