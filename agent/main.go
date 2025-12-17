@@ -450,5 +450,3 @@ func formatMetricForLog(m *pb.Metric) string {
 func generateCorrelationID() string {
 	return uuid.New().String()
 }
-
-// snyk test
