@@ -40,7 +40,6 @@ jobs:
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
-      # STEP 1: Build image locally for scanning (ARM64 only for speed)
       - name: Build agent image for scanning
         run: |
           docker buildx build \
@@ -49,7 +48,7 @@ jobs:
             -t ${{ secrets.DOCKER_HUB_NAME }}/gomon-agent:scan \
             -f Dockerfile.agent .
 
-      # STEP 2: Run Trivy security scan
+      # Trivy scan
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -59,36 +58,34 @@ jobs:
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
           exit-code: '1'
-      
-      # STEP 2.*: Upload Snyk results to GitHub Security
-      - name: Run Snyk to check Docker image for vulnerabilities
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
+
+      # Snyk scan
+      - name: Run Snyk to check Docker image
         uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: ${{ secrets.DOCKER_HUB_NAME }}/gomon-agent:scan
-          args: --severity-threshold=high --file=Dockerfile.agent
-        continue-on-error: true  # Don't fail build, just report
+          args: --severity-threshold=high --sarif-file-output=snyk.sarif
+        continue-on-error: true
 
-      # STEP 2.*: Upload Snyk results to GitHub Security
-      - name: Upload Snyk results to GitHub Code Scanning
+      - name: Upload Snyk results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && hashFiles('snyk.sarif') != ''
         with:
           sarif_file: snyk.sarif
+          category: 'snyk'
 
-      # STEP 3: Upload scan results to GitHub Security tab
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()  # Upload even if scan fails
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      # STEP 4: Login to Docker Hub (only if scan passed)
       - name: Login to DockerHub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      # STEP 5: Build and push multi-arch (only if scan passed)
       - name: Build and push agent (multi-arch)
         run: |
           docker buildx build --platform linux/amd64,linux/arm64 \
@@ -97,7 +94,6 @@ jobs:
             -t ${{ secrets.DOCKER_HUB_NAME }}/gomon-agent:${{ steps.vars.outputs.date }}-${{ steps.vars.outputs.sha_short }} \
             -f Dockerfile.agent .
       
-      # STEP 6: Trigger Kubernetes deployment update
       - name: Trigger update of k8s deployment YAML
         uses: peter-evans/repository-dispatch@v3
         with:
