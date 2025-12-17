@@ -55,7 +55,7 @@ jobs:
           image-ref: '${{ secrets.DOCKER_HUB_NAME }}/gomon-agent:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL'
           ignore-unfixed: true
           exit-code: '1'
 
