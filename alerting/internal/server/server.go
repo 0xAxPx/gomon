@@ -12,19 +12,23 @@ import (
 )
 
 type Server struct {
-	router        *gin.Engine
-	alertHandler  *handlers.AlertHandler
-	healthHandler *handlers.HealthHandler
-	port          int
+	router         *gin.Engine
+	alertHandler   *handlers.AlertHandler
+	webhookHandler *handlers.WebhookHandler
+	healthHandler  *handlers.HealthHandler
+	port           int
 }
 
 func New(alertHandler *handlers.AlertHandler, healthHandler *handlers.HealthHandler, port int) *Server {
 
+	webhookHandler := handlers.NewWebhookHandler(alertHandler)
+
 	return &Server{
-		router:        gin.Default(),
-		alertHandler:  alertHandler,
-		healthHandler: healthHandler,
-		port:          port,
+		router:         gin.Default(),
+		alertHandler:   alertHandler,
+		webhookHandler: webhookHandler,
+		healthHandler:  healthHandler,
+		port:           port,
 	}
 }
 
@@ -34,6 +38,8 @@ func (s *Server) SetupRoutes() {
 
 	// Prometheus metrics
 	s.router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	s.router.POST("/webhook", s.webhookHandler.HandleVMWebhook)
 
 	// Alert routes
 	api := s.router.Group("/api/v1/alerts")
