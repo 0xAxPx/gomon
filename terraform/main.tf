@@ -175,7 +175,9 @@ resource "kubernetes_deployment" "victoria_metrics" {
           
           args = [
             "-storageDataPath=/var/lib/victoria-metrics",
-            "-promscrape.config=/etc/vm/scrape.yml"
+            "-promscrape.config=/etc/vm/scrape.yml",
+            "-rule=/etc/vm/alerts.yml",
+            "-notifier.url=http://alerting.monitoring.svc.cluster.local:8099/webhook"
           ]
           
           volume_mount {
@@ -186,6 +188,13 @@ resource "kubernetes_deployment" "victoria_metrics" {
           volume_mount {
             name       = "scrape-config"
             mount_path = "/etc/vm"
+            read_only  = true
+          }
+
+          volume_mount {
+            name       = "alert-rules"
+            mount_path = "/etc/vm/alerts.yml"
+            sub_path   = "alerts.yml"
             read_only  = true
           }
           
@@ -211,6 +220,12 @@ resource "kubernetes_deployment" "victoria_metrics" {
           name = "scrape-config"
           config_map {
             name = kubernetes_config_map.victoria_metrics_scrape_config.metadata[0].name
+          }
+        }
+        volume {
+          name = "alert-rules"
+          config_map {
+            name = kubernetes_config_map.victoria_metrics_alert_rules.metadata[0].name
           }
         }
       }
@@ -243,6 +258,39 @@ resource "kubernetes_service" "victoria_metrics" {
     }
   }
 }
+
+resource "kubernetes_config_map" "victoria_metrics_alert_rules" {
+  metadata {
+    name      = "victoria-metrics-alert-rules"
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "victoria-metrics"
+      tier      = "alerting"
+    })
+  }
+
+  data = {
+    "alerts.yml" = <<-EOF
+      groups:
+        - name: gomon_infrastructure
+          interval: 30s
+          rules:
+            # Disk Space Critical Alert
+            - alert: DiskSpaceCritical
+              expr: disk_used_percent > 95
+              for: 5m
+              labels:
+                severity: critical
+                component: agent
+                team: sre
+              annotations:
+                summary: "CRITICAL: Disk almost full on {{ $labels.instance }}"
+                description: "Disk usage at {{ $value }}% on {{ $labels.mountpoint }}. Only {{ 100 - $value }}% remaining."
+                runbook: "1. Check disk usage: df -h\n2. Identify large files: du -sh /* | sort -rh | head -10\n3. Clean up logs or temp files"
+    EOF
+  }
+}
+
 
 # Postgres
 resource "kubernetes_config_map" "postgres_config" {

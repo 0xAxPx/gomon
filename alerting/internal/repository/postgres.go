@@ -300,3 +300,98 @@ func (r *PostgresAlertRepository) CountActiveAlerts() (int, error) {
 
 	return count, err
 }
+
+// CreateInternal creates an alert from webhook (no validation)
+func (r *PostgresAlertRepository) CreateInternal(alert *models.Alert) error {
+	// Set UUIDs if not set
+	if alert.ID == uuid.Nil {
+		alert.ID = uuid.New()
+	}
+	if alert.AlertGroupID == uuid.Nil {
+		alert.AlertGroupID = uuid.New()
+	}
+
+	// Set timestamps
+	now := time.Now()
+	if alert.CreatedAt.IsZero() {
+		alert.CreatedAt = now
+	}
+	alert.UpdatedAt = now
+
+	// Default status
+	if alert.Status == "" {
+		alert.Status = "firing"
+	}
+
+	// Marshal labels and annotations to JSON
+	labelsJSON, err := json.Marshal(alert.Labels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal labels: %w", err)
+	}
+
+	annotationsJSON, err := json.Marshal(alert.Annotations)
+	if err != nil {
+		return fmt.Errorf("failed to marshal annotations: %w", err)
+	}
+
+	query := `
+		INSERT INTO alerts_active (
+			id, alert_group_id, source, severity, status,
+			title, description, namespace, labels, annotations,
+			jaeger_trace_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`
+
+	_, err = r.db.Exec(
+		query,
+		alert.ID,
+		alert.AlertGroupID,
+		alert.Source,
+		alert.Severity,
+		alert.Status,
+		alert.Title,
+		alert.Description,
+		alert.Namespace,
+		labelsJSON,
+		annotationsJSON,
+		alert.JaegerTraceID,
+		alert.CreatedAt,
+		alert.UpdatedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to insert alert: %w", err)
+	}
+
+	return nil
+}
+
+// ResolveByFingerprint resolves alert by fingerprint (from VM webhook)
+func (r *PostgresAlertRepository) ResolveByFingerprint(fingerprint string) error {
+	now := time.Now()
+
+	query := `
+		UPDATE alerts_active 
+		SET status = 'resolved', 
+		    resolved_at = $1,
+		    updated_at = $1
+		WHERE labels->>'fingerprint' = $2
+		  AND status = 'firing'
+		RETURNING id
+	`
+
+	var alertID uuid.UUID
+	err := r.db.QueryRow(query, now, fingerprint).Scan(&alertID)
+
+	if err == sql.ErrNoRows {
+		// No active alert with this fingerprint - not an error
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to resolve alert: %w", err)
+	}
+
+	log.Printf("✅ Auto-resolved alert ID: %s", alertID)
+	return nil
+}
