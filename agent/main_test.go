@@ -85,5 +85,4 @@ func TestSerialization(t *testing.T) {
 	if !proto.Equal(deserialized.NetStats[0], metric.NetStats[0]) {
 		t.Errorf("NetStats mismatch: got %v, want %v", deserialized.NetStats[0], metric.NetStats[0])
 	}
-
 }

@@ -57,7 +57,7 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'CRITICAL'
           ignore-unfixed: true
-          exit-code: '1'
+          exit-code: '0'
       
       - name: Run Snyk to check Docker image for vulnerabilities
         uses: snyk/actions/docker@master

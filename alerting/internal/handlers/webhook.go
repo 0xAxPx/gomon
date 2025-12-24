@@ -142,7 +142,6 @@ func (h *WebhookHandler) processAlert(ctx context.Context, vmAlert VMAlert) erro
 
 		// Send Slack notification
 		if h.alertHandler.slackClient != nil {
-			// Reuse your existing Slack logic or adapt it
 			go func() {
 				message := fmt.Sprintf(
 					"🚨 *%s*\n*Severity:* %s\n*Description:* %s",
