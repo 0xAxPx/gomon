@@ -23,15 +23,6 @@ func TestKafkaDeserialization(t *testing.T) {
 		t.Errorf("Error returned while serializing metric to proto format %v", err)
 	}
 
-	// Generate kafka message
-	//kafkaMessage := &kafka.Message{
-	//	Value: metricProto,
-	//}
-
-	// Deserialize
-	//var deserialized pb.Metric
-	//err = proto.Unmarshal(kafkaMessage.Value, &deserialized)
-
 	deserialized, err := testutils.DeserializeToMetric(metricProto)
 	if err != nil {
 		t.Errorf("Deserialization failed: %v", err)
