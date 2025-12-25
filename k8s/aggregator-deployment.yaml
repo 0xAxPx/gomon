@@ -25,7 +25,7 @@ spec:
       containers:
       # Main aggregator container (your existing setup with fixes)
       - name: aggregator
-        image: ragazzo271985/aggregator:20251216-2f989ea
+        image: ragazzo271985/aggregator:20251225-5ca33f9
         imagePullPolicy: Always
         ports:
         - containerPort: 2113
