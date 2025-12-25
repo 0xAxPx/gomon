@@ -174,6 +174,5 @@ func (h *WebhookHandler) processAlert(ctx context.Context, vmAlert VMAlert) erro
 			h.alertHandler.metrics.SetActiveAlerts(float64(h.alertHandler.activeAlertCount))
 		}
 	}
-
 	return nil
 }

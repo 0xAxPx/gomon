@@ -66,23 +66,6 @@ jobs:
           sarif_file: 'trivy-results.sarif'
           category: 'trivy'
 
-      # Snyk scan
-      - name: Run Snyk to check Docker image
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: ${{ secrets.DOCKER_HUB_NAME }}/gomon-agent:scan
-          args: --severity-threshold=high --sarif-file-output=snyk.sarif
-        continue-on-error: true
-
-      - name: Upload Snyk results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('snyk.sarif') != ''
-        with:
-          sarif_file: snyk.sarif
-          category: 'snyk'
-
       - name: Login to DockerHub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
