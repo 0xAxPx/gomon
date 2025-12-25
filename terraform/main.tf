@@ -176,7 +176,7 @@ resource "kubernetes_deployment" "victoria_metrics" {
           args = [
             "-storageDataPath=/var/lib/victoria-metrics",
             "-promscrape.config=/etc/vm/scrape.yml",
-            "-rule=/etc/vm/alerts.yml",
+            "-rule=/etc/vm/alerts/alerts.yml",
             "-notifier.url=http://alerting.monitoring.svc.cluster.local:8099/webhook"
           ]
           
@@ -193,8 +193,7 @@ resource "kubernetes_deployment" "victoria_metrics" {
 
           volume_mount {
             name       = "alert-rules"
-            mount_path = "/etc/vm/alerts.yml"
-            sub_path   = "alerts.yml"
+            mount_path = "/etc/vm/alerts"
             read_only  = true
           }
           
