@@ -33,7 +33,6 @@ func TestSerialization(t *testing.T) {
 		UsedGb:      45,
 	})
 
-	//set Net metrics
 	metric.NetStats = append(metric.NetStats, &pb.NetworkUsage{
 		InterfaceName: "eth0",
 		BytesSent:     283303,
