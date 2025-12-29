@@ -167,7 +167,7 @@ resource "kubernetes_deployment" "victoria_metrics" {
       spec {
         container {
           name  = "victoria-metrics"
-          image = "victoriametrics/victoria-metrics:v1.105.0cl"
+          image = "victoriametrics/victoria-metrics:v1.132.0"  
           
           port {
             container_port = 8428
