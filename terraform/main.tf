@@ -167,7 +167,7 @@ resource "kubernetes_deployment" "victoria_metrics" {
       spec {
         container {
           name  = "victoria-metrics"
-          image = "victoriametrics/victoria-metrics:v1.101.0"
+          image = "victoriametrics/victoria-metrics:v1.105.0cl"
           
           port {
             container_port = 8428
@@ -175,9 +175,7 @@ resource "kubernetes_deployment" "victoria_metrics" {
           
           args = [
             "-storageDataPath=/var/lib/victoria-metrics",
-            "-promscrape.config=/etc/vm/scrape.yml",
-            "-rule=/etc/vm/alerts/alerts.yml",
-            "-notifier.url=http://alerting.monitoring.svc.cluster.local:8099/webhook"
+            "-promscrape.config=/etc/vm/scrape.yml"
           ]
           
           volume_mount {
@@ -190,13 +188,7 @@ resource "kubernetes_deployment" "victoria_metrics" {
             mount_path = "/etc/vm"
             read_only  = true
           }
-
-          volume_mount {
-            name       = "alert-rules"
-            mount_path = "/etc/vm/alerts"
-            read_only  = true
-          }
-          
+                
           resources {
             requests = {
               cpu    = "500m"
@@ -219,12 +211,6 @@ resource "kubernetes_deployment" "victoria_metrics" {
           name = "scrape-config"
           config_map {
             name = kubernetes_config_map.victoria_metrics_scrape_config.metadata[0].name
-          }
-        }
-        volume {
-          name = "alert-rules"
-          config_map {
-            name = kubernetes_config_map.victoria_metrics_alert_rules.metadata[0].name
           }
         }
       }
