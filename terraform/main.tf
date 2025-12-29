@@ -244,6 +244,106 @@ resource "kubernetes_service" "victoria_metrics" {
   }
 }
 
+# VMAlert Deployment
+resource "kubernetes_deployment" "vmalert" {
+  metadata {
+    name      = "vmalert"
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "vmalert"
+      tier      = "alerting"
+    })
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "vmalert"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "vmalert"
+        }
+      }
+
+      spec {
+        container {
+          name  = "vmalert"
+          image = "victoriametrics/vmalert:v1.132.0"
+
+          args = [
+            "-datasource.url=http://victoria-metrics:8428",
+            "-notifier.url=http://alerting.monitoring.svc.cluster.local:8099/webhook",
+            "-rule=/etc/vm/alerts/alerts.yml",
+            "-external.url=http://victoria.local",
+            "-evaluationInterval=30s"
+          ]
+
+          port {
+            container_port = 8880
+            name           = "http"
+          }
+
+          volume_mount {
+            name       = "alert-rules"
+            mount_path = "/etc/vm/alerts"
+            read_only  = true
+          }
+
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "200m"
+              memory = "256Mi"
+            }
+          }
+        }
+
+        volume {
+          name = "alert-rules"
+          config_map {
+            name = kubernetes_config_map.victoria_metrics_alert_rules.metadata[0].name
+          }
+        }
+      }
+    }
+  }
+}
+
+# VMAlert Service
+resource "kubernetes_service" "vmalert" {
+  metadata {
+    name      = "vmalert"
+    namespace = local.namespace
+    labels = merge(local.common_labels, {
+      component = "vmalert"
+      tier      = "networking"
+    })
+  }
+
+  spec {
+    type = "ClusterIP"
+
+    port {
+      port        = 8880
+      target_port = 8880
+      protocol    = "TCP"
+    }
+
+    selector = {
+      app = "vmalert"
+    }
+  }
+}
+
 resource "kubernetes_config_map" "victoria_metrics_alert_rules" {
   metadata {
     name      = "victoria-metrics-alert-rules"
@@ -260,18 +360,17 @@ resource "kubernetes_config_map" "victoria_metrics_alert_rules" {
         - name: gomon_infrastructure
           interval: 30s
           rules:
-            # Disk Space Critical Alert
             - alert: DiskSpaceCritical
               expr: disk_used_percent > 95
               for: 5m
               labels:
-                severity: critical
+                severity: P1
                 component: agent
                 team: sre
               annotations:
                 summary: "CRITICAL: Disk almost full on {{ $labels.instance }}"
-                description: "Disk usage at {{ $value }}% on {{ $labels.mountpoint }}. Only {{ 100 - $value }}% remaining."
-                runbook: "1. Check disk usage: df -h\n2. Identify large files: du -sh /* | sort -rh | head -10\n3. Clean up logs or temp files"
+                description: "Disk usage at {{ $value }}% on {{ $labels.mountpoint }}"
+                runbook: "Check disk usage: df -h"
     EOF
   }
 }
