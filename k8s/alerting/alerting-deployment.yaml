@@ -18,7 +18,7 @@ spec:
       serviceAccountName: alerting
       containers:
       - name: alerting
-        image: ragazzo271985/alerting-service:20260121-0cdb1f8
+        image: ragazzo271985/alerting-service:20260215-0a9148c
         imagePullPolicy: Always
         ports:
         - containerPort: 8099
