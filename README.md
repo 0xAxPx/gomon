@@ -317,6 +317,181 @@ curl -X POST http://alerting.local/api/v1/alerts \
 
 ---
 
+## 🔄 Infrastructure Restoration
+
+If Kubernetes cluster is reset or you're setting up on a new machine, follow these steps to restore the complete GoMon infrastructure:
+
+### **Prerequisites**
+- Docker Desktop with Kubernetes enabled
+- kubectl configured (`kubectl config current-context` shows `docker-desktop`)
+- Terraform installed
+- /etc/hosts configured with local domains
+
+### **Step 1: Install Core Infrastructure**
+```bash
+# Install NGINX Ingress Controller
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
+
+# Wait for ingress controller
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=300s
+
+# Install ArgoCD
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# Wait for ArgoCD
+kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
+```
+
+### **Step 2: Apply Terraform Infrastructure**
+```bash
+cd terraform
+terraform init
+terraform apply -auto-approve
+```
+
+**This creates:**
+- monitoring namespace
+- VictoriaMetrics with persistent storage
+- PostgreSQL database
+- Jaeger tracing
+- VMAlert
+- Elasticsearch load balancer
+- All necessary ConfigMaps and Services
+
+### **Step 3: Create Secrets**
+```bash
+# Slack credentials (replace with your values)
+kubectl create secret generic slack-bot-token -n monitoring \
+  --from-literal=token=xoxb-YOUR-BOT-TOKEN
+
+kubectl create secret generic grafana-slack-secret -n monitoring \
+  --from-literal=webhook-url=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+```
+
+### **Step 4: Deploy Applications via ArgoCD**
+```bash
+cd argocd
+
+# Apply ArgoCD ingress
+kubectl apply -f argocd-ingress.yaml
+
+# Deploy applications
+kubectl apply -f applications/gomon-main.yaml
+kubectl apply -f applications/gomon-feature.yaml  # Optional
+```
+
+### **Step 5: Initialize Alerting Database**
+```bash
+# Create alerting database and user
+kubectl exec -it $(kubectl get pods -n monitoring -l app=postgres -o name) -n monitoring -- psql -U sonarqube << 'EOF'
+CREATE DATABASE alerting;
+CREATE USER alerting_service WITH PASSWORD 'alerting_secure_password123';
+GRANT ALL PRIVILEGES ON DATABASE alerting TO alerting_service;
+\c alerting
+GRANT ALL ON SCHEMA public TO alerting_service;
+EOF
+
+# Create alerts_active table
+kubectl exec -it $(kubectl get pods -n monitoring -l app=postgres -o name) -n monitoring -- psql -U sonarqube -d alerting << 'EOF'
+CREATE TABLE alerts_active (
+    id UUID PRIMARY KEY,
+    alert_group_id UUID NOT NULL,
+    source VARCHAR(50) NOT NULL,
+    severity VARCHAR(10) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'firing',
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    namespace VARCHAR(100),
+    labels JSONB DEFAULT '{}',
+    annotations JSONB DEFAULT '{}',
+    incident_id UUID,
+    jaeger_trace_id VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    acknowledged_at TIMESTAMP,
+    acknowledged_by VARCHAR(100),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMP,
+    assigned_to VARCHAR(100)
+);
+
+CREATE INDEX idx_alerts_status ON alerts_active(status);
+CREATE INDEX idx_alerts_severity ON alerts_active(severity);
+CREATE INDEX idx_alerts_created_at ON alerts_active(created_at);
+CREATE INDEX idx_alerts_namespace ON alerts_active(namespace);
+CREATE INDEX idx_alerts_labels ON alerts_active USING GIN(labels);
+
+GRANT ALL ON TABLE alerts_active TO alerting_service;
+EOF
+```
+
+### **Step 6: Verify Deployment**
+```bash
+# Check all pods are running
+kubectl get pods -n monitoring
+
+# Access services
+# Grafana: http://grafana.local
+# ArgoCD: https://argocd.local (admin / get password with command below)
+# Kibana: http://kibana.local
+# Jaeger: http://jaeger.local
+# VictoriaMetrics: http://victoria.local
+
+# Get ArgoCD password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
+```
+
+### **Expected Infrastructure**
+
+After successful restoration, you should have:
+
+**Pods (17+ running):**
+- agent (DaemonSet)
+- aggregator
+- alerting
+- grafana
+- victoria-metrics
+- vmalert
+- kafka-0, kafka-1, kafka-2
+- postgres
+- elasticsearch-lb
+- jaeger
+- kibana
+- logstash
+- sonarqube
+
+**Services:**
+- All accessible via ingress at *.local domains
+- VictoriaMetrics scraping metrics every 15s
+- Grafana alerting configured with Slack notifications
+- Alert API available at http://alerting.local
+
+### **Troubleshooting**
+
+**Pods in CrashLoopBackOff:**
+```bash
+kubectl logs <pod-name> -n monitoring
+kubectl describe pod <pod-name> -n monitoring
+```
+
+**Secrets missing:**
+```bash
+kubectl get secrets -n monitoring
+# Recreate missing secrets from Step 3
+```
+
+**Database connection failures:**
+```bash
+# Verify postgres is running
+kubectl get pods -n monitoring | grep postgres
+
+# Check database exists
+kubectl exec -it $(kubectl get pods -n monitoring -l app=postgres -o name) -n monitoring -- psql -U sonarqube -l
+```
+
 ## 📝 License
 
 Open-source for educational purposes. Feel free to use as reference or learning material.

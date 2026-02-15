@@ -130,6 +130,38 @@ resource "kubernetes_config_map" "victoria_metrics_scrape_config" {
             component: 'observability'
         metrics_path: '/metrics'
         scrape_interval: 30s
+
+      # ========================================
+      # Ethereum Node Metrics (Mac)
+      # ========================================
+      
+      # Geth Execution Client
+      - job_name: 'ethereum-geth'
+        static_configs:
+        - targets: ['192.168.0.96:6060']
+          labels:
+            service: 'geth'
+            component: 'ethereum'
+            tier: 'execution-layer'
+            network: 'sepolia'
+            node_type: 'observer'
+        metrics_path: '/debug/metrics/prometheus'
+        scrape_interval: 15s
+        scrape_timeout: 10s
+      
+      # Lighthouse Consensus Client
+      - job_name: 'ethereum-lighthouse'
+        static_configs:
+        - targets: ['192.168.0.96:5054']
+          labels:
+            service: 'lighthouse'
+            component: 'ethereum'
+            tier: 'consensus-layer'
+            network: 'sepolia'
+            node_type: 'observer'
+        metrics_path: '/metrics'
+        scrape_interval: 15s
+        scrape_timeout: 10s
     EOF
   }
 }
