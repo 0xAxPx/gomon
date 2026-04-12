@@ -19,7 +19,7 @@ data:
         spike_limit_mib: 100
         check_interval: 1s
       batch:
-        timeout: 15s
+        timeout: 2s
         send_batch_size: 1024
 
     exporters:
@@ -31,6 +31,8 @@ data:
         metrics_endpoint: http://victoria-metrics:8428/opentelemetry/api/v1/push
         tls:
           insecure: true
+      debug:                   
+        verbosity: detailed
 
     extensions:
       health_check:
@@ -47,7 +49,7 @@ data:
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [otlphttp/victoriametrics]
+          exporters: [otlphttp/victoriametrics, debug]
         traces:
           receivers: [otlp]
           processors: [memory_limiter, batch]
