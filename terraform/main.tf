@@ -130,38 +130,7 @@ resource "kubernetes_config_map" "victoria_metrics_scrape_config" {
             component: 'observability'
         metrics_path: '/metrics'
         scrape_interval: 30s
-
-      # ========================================
-      # Ethereum Node Metrics (Mac)
-      # ========================================
       
-      # Geth Execution Client
-      - job_name: 'ethereum-geth'
-        static_configs:
-        - targets: ['192.168.0.96:6060']
-          labels:
-            service: 'geth'
-            component: 'ethereum'
-            tier: 'execution-layer'
-            network: 'sepolia'
-            node_type: 'observer'
-        metrics_path: '/debug/metrics/prometheus'
-        scrape_interval: 15s
-        scrape_timeout: 10s
-      
-      # Lighthouse Consensus Client
-      - job_name: 'ethereum-lighthouse'
-        static_configs:
-        - targets: ['192.168.0.96:5054']
-          labels:
-            service: 'lighthouse'
-            component: 'ethereum'
-            tier: 'consensus-layer'
-            network: 'sepolia'
-            node_type: 'observer'
-        metrics_path: '/metrics'
-        scrape_interval: 15s
-        scrape_timeout: 10s
     EOF
   }
 }
@@ -207,7 +176,8 @@ resource "kubernetes_deployment" "victoria_metrics" {
           
           args = [
             "-storageDataPath=/var/lib/victoria-metrics",
-            "-promscrape.config=/etc/vm/scrape.yml"
+            "-promscrape.config=/etc/vm/scrape.yml",
+            "-opentelemetry.usePrometheusNaming=true"
           ]
           
           volume_mount {
@@ -670,6 +640,7 @@ resource "kubernetes_ingress_v1" "monitoring_ingress" {
         }
       }
     }
+
     rule {
       host = "alerting.local"
 
@@ -689,6 +660,41 @@ resource "kubernetes_ingress_v1" "monitoring_ingress" {
         }
       }
     }  
+  }
+}
+
+# gRPC ingress — opentelemetry only
+resource "kubernetes_ingress_v1" "otelcol_ingress" {
+  metadata {
+    name      = "otelcol-ingress"
+    namespace = local.namespace
+    annotations = {
+      "nginx.ingress.kubernetes.io/backend-protocol" = "GRPC"
+      "nginx.ingress.kubernetes.io/proxy-read-timeout" = "600"
+      "nginx.ingress.kubernetes.io/proxy-send-timeout" = "600"
+    }
+  }
+  spec {
+    ingress_class_name = "nginx"
+    rule { 
+      host = "opentelemetry.local"
+
+      http {
+        path {
+          path = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "opentelemetry"
+              port {
+                number = 4317
+              }
+            }
+          }
+        }
+      } 
+    }
   }
 }
 
