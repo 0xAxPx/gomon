@@ -1,0 +1,46 @@
+# Falco Helm values for OpenShift Local
+# Chart: falcosecurity/falco
+
+driver:
+  enabled: true
+  kind: modern_ebpf       # Use modern eBPF driver — requires kernel 5.8+, no kernel module compilation needed
+
+scc:
+  create: true            # Let Helm create the OpenShift SCC automatically
+
+falco:
+  grpc:
+    enabled: true         # Enable gRPC server so Falcosidekick can consume events
+  grpc_output:
+    enabled: true
+  rules_files:
+    - /etc/falco/falco_rules.yaml       # Base rules file (minimal at startup)
+    - /etc/falco/falco_rules.local.yaml # Local overrides
+    - /rulesfiles/falco_rules.yaml      # falcoctl downloaded rules — explicitly before rules.d so base rules exist when exceptions load
+    - /etc/falco/rules.d                # Our custom exceptions load last — base rule guaranteed to exist
+
+falcosidekick:
+  enabled: true           # Deploy Falcosidekick alongside Falco to route alerts
+  webui:
+    enabled: true         # Enable Falcosidekick UI — dashboard for viewing alerts
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+
+customRules:
+  console-exceptions.yaml: |-
+    - macro: user_known_contact_k8s_api_server_activities
+      condition: (container.name = "console" and proc.name = "bridge")
+
+falcoctl:
+  config:
+    artifact:
+      install:
+        rulesfilesDir: /etc/falco/rules.d
+      follow:
+        rulesfilesDir: /etc/falco/rules.d

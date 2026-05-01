@@ -1,0 +1,12 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: falco
+  namespace: falco                        
+spec:
+  channel: stable                         
+  name: falco                             
+  source: operatorhubio-catalog           
+  sourceNamespace: openshift-marketplace  
+  installPlanApproval: Manual           
+  startingCSV: falco-operator.v0.7.6  

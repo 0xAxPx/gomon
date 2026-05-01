@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-local-rules
+  namespace: falco
+data:
+  falco_rules.local.yaml: |-
+    - rule: Unexpected connection to K8s API Server from container
+      override:
+        exceptions: append
+      exceptions:
+        - name: allow_console_bridge
+          fields: [container.name, proc.name]
+          values:
+            - [console, bridge]
