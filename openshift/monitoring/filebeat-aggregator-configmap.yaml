@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-aggregator-config
+  namespace: monitoring
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+    - type: log
+      enabled: true
+      paths:
+        - /var/log/aggregator.log
+      fields:
+        app: aggregator
+        environment: monitoring
+        service: metrics-aggregator
+      fields_under_root: true
+      
+    output.logstash:
+      hosts: ["logstash:5044"]
+      
+    logging.level: info
+    logging.to_stderr: true
