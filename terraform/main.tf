@@ -724,9 +724,9 @@ events {
         # ✅ CONNECTION POOLING: Optimized for external connections
         upstream elasticsearch_cluster {
             # Primary ES node - EXTERNAL VM
-            server 192.168.0.45:9200 max_fails=3 fail_timeout=30s weight=2;
+            server 192.168.0.97:9200 max_fails=3 fail_timeout=30s weight=2;
             # Secondary ES node - EXTERNAL VM  
-            server 192.168.0.157:9200 max_fails=3 fail_timeout=30s weight=1;
+            server 192.168.0.98:9200 max_fails=3 fail_timeout=30s weight=1;
             
             # External connection optimization
             keepalive 4;
