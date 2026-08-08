@@ -754,14 +754,14 @@ events {
             
             # ✅ DEBUGGING: Individual node health checks
             location /es1-health {
-                proxy_pass http://192.168.0.45:9200/_cluster/health;
+                proxy_pass http://192.168.0.97:9200/_cluster/health;
                 proxy_connect_timeout 5s;
                 proxy_read_timeout 10s;
                 access_log off;
             }
             
             location /es2-health {
-                proxy_pass http://192.168.0.157:9200/_cluster/health;
+                proxy_pass http://192.168.0.98:9200/_cluster/health;
                 proxy_connect_timeout 5s;
                 proxy_read_timeout 10s;
                 access_log off;
@@ -917,16 +917,16 @@ resource "kubernetes_deployment" "elasticsearch_lb" {
           command = ["/bin/sh", "-c"]
           args = [<<EOF
                 echo "🔍 Testing external ES connectivity from HOST NETWORK..."
-                echo "Testing Node 1 (192.168.0.45:9200):"
-                if curl -m 15 -f http://192.168.0.45:9200; then
+                echo "Testing Node 1 (192.168.0.97:9200):"
+                if curl -m 15 -f http://192.168.0.97:9200; then
                   echo "✅ Node 1 reachable"
                 else
                   echo "❌ Node 1 FAILED - Exit code: $?"
                   exit 1
                 fi
 
-                echo "Testing Node 2 (192.168.0.157:9200):"
-                if curl -m 15 -f http://192.168.0.157:9200; then
+                echo "Testing Node 2 (192.168.0.98:9200):"
+                if curl -m 15 -f http://192.168.0.98:9200; then
                   echo "✅ Node 2 reachable"
                 else
                   echo "❌ Node 2 FAILED - Exit code: $?"
