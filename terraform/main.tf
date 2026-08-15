@@ -700,6 +700,7 @@ resource "kubernetes_ingress_v1" "otelcol_ingress" {
 
 
 # ES Config Map (Nginx)
+# ssh -i ~/.crc/machines/crc/id_ed25519 -p 2222 core@127.0.0.1 -R 9201:192.168.0.97:9200 -R 9202:192.168.0.98:9200
 resource "kubernetes_config_map" "elasticsearch_lb_config" {
   metadata {
     name = "elasticsearch-lb-config"
@@ -830,6 +831,10 @@ resource "kubernetes_deployment" "elasticsearch_lb" {
 
   spec {
     replicas = 1
+
+    strategy {
+      type = "Recreate"
+    }
 
     selector {
       match_labels = {
