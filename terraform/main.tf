@@ -723,10 +723,10 @@ events {
         
         # ✅ CONNECTION POOLING: Optimized for external connections
         upstream elasticsearch_cluster {
-            # Primary ES node - EXTERNAL VM
-            server 192.168.0.97:9200 max_fails=3 fail_timeout=30s weight=2;
-            # Secondary ES node - EXTERNAL VM  
-            server 192.168.0.98:9200 max_fails=3 fail_timeout=30s weight=1;
+            # Primary ES node - via SSH tunnel (CRC blocks direct LAN)
+            server 127.0.0.1:9201 max_fails=3 fail_timeout=30s weight=2;
+            # Secondary ES node - via SSH tunnel (CRC blocks direct LAN)
+            server 127.0.0.1:9202 max_fails=3 fail_timeout=30s weight=1;
             
             # External connection optimization
             keepalive 4;
@@ -754,14 +754,14 @@ events {
             
             # ✅ DEBUGGING: Individual node health checks
             location /es1-health {
-                proxy_pass http://192.168.0.97:9200/_cluster/health;
+                proxy_pass http://127.0.0.1:9201/_cluster/health;
                 proxy_connect_timeout 5s;
                 proxy_read_timeout 10s;
                 access_log off;
             }
             
             location /es2-health {
-                proxy_pass http://192.168.0.98:9200/_cluster/health;
+                proxy_pass http://127.0.0.1:9202/_cluster/health;
                 proxy_connect_timeout 5s;
                 proxy_read_timeout 10s;
                 access_log off;
@@ -808,6 +808,7 @@ events {
                 add_header X-Response-Time $upstream_response_time always;
             }
         }
+
         
         # Logging
         error_log /var/log/nginx/error.log info;
@@ -917,16 +918,16 @@ resource "kubernetes_deployment" "elasticsearch_lb" {
           command = ["/bin/sh", "-c"]
           args = [<<EOF
                 echo "🔍 Testing external ES connectivity from HOST NETWORK..."
-                echo "Testing Node 1 (192.168.0.97:9200):"
-                if curl -m 15 -f http://192.168.0.97:9200; then
+                echo "Testing Node 1 (127.0.0.1:9201 -> 192.168.0.97):"
+                if curl -m 15 -f http://127.0.0.1:9201; then
                   echo "✅ Node 1 reachable"
                 else
                   echo "❌ Node 1 FAILED - Exit code: $?"
                   exit 1
                 fi
 
-                echo "Testing Node 2 (192.168.0.98:9200):"
-                if curl -m 15 -f http://192.168.0.98:9200; then
+                echo "Testing Node 2 (127.0.0.1:9202 -> 192.168.0.98):"
+                iif curl -m 15 -f http://127.0.0.1:9202; then
                   echo "✅ Node 2 reachable"
                 else
                   echo "❌ Node 2 FAILED - Exit code: $?"
