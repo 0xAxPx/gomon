@@ -927,7 +927,7 @@ resource "kubernetes_deployment" "elasticsearch_lb" {
                 fi
 
                 echo "Testing Node 2 (127.0.0.1:9202 -> 192.168.0.98):"
-                iif curl -m 15 -f http://127.0.0.1:9202; then
+                if curl -m 15 -f http://127.0.0.1:9202; then
                   echo "✅ Node 2 reachable"
                 else
                   echo "❌ Node 2 FAILED - Exit code: $?"
