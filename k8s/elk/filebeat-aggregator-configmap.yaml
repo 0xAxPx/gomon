@@ -13,22 +13,16 @@ data:
       fields:
         app: aggregator
         environment: monitoring
-        service: metrics-aggregator
+        app_service: metrics-aggregator
       fields_under_root: true
       
-    output.elasticsearch:
-      hosts: ["http://elasticsearch-lb:9200"]
-      index: "filebeat-aggregator-%{+yyyy.MM.dd}"
-      bulk_max_size: 200
+    output.logstash:
+      hosts: ["logstash:5044"]
 
     queue.mem:
       events: 2048
       flush.min_events: 200
       flush.timeout: 5s
-
-    setup.ilm.enabled: false
-    setup.template.name: "filebeat-aggregator"
-    setup.template.pattern: "filebeat-aggregator-*"
 
     logging.level: info
     logging.to_stderr: true
