@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: kibana
-        image: docker.elastic.co/kibana/kibana:8.7.0
+        image: docker.elastic.co/kibana/kibana:8.19.1
         env:
         - name: SERVER_HOST
           value: "0.0.0.0"
@@ -53,10 +53,6 @@ spec:
             port: 5601
           initialDelaySeconds: 120
           periodSeconds: 30
-        securityContext:
-          runAsUser: 1000
-          runAsGroup: 1000
-          runAsNonRoot: true
 ---
 apiVersion: v1
 kind: Service
